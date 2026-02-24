@@ -50,3 +50,4 @@ AIを活用してフリマ出品を効率化するWebアプリです。
 ```bash
 npm install
 npm run dev
+```
