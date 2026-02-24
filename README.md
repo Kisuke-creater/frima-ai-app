@@ -1,0 +1,1 @@
+# frima-ai-app
