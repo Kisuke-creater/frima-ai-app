@@ -43,7 +43,7 @@ export default function ItemsPage() {
     setSoldLoading(item.id);
     try {
       setError("");
-      await markAsSold(item.id);
+      await markAsSold(user.uid, item.id);
       await fetchItems();
     } catch (e: unknown) {
       setError(getFirestoreClientErrorMessage(e));

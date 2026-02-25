@@ -5,7 +5,6 @@ import {
   doc,
   updateDoc,
   query,
-  where,
   orderBy,
   serverTimestamp,
   Timestamp,
@@ -49,8 +48,7 @@ export function getFirestoreClientErrorMessage(error: unknown): string {
 export async function getItems(uid: string): Promise<Item[]> {
   const db = getFirebaseDb();
   const q = query(
-    collection(db, "items"),
-    where("uid", "==", uid),
+    collection(db, "users", uid, "items"),
     orderBy("createdAt", "desc")
   );
   const snapshot = await getDocs(q);
@@ -62,7 +60,7 @@ export async function addItem(
   item: Omit<Item, "id" | "createdAt" | "soldAt">
 ): Promise<string> {
   const db = getFirebaseDb();
-  const docRef = await addDoc(collection(db, "items"), {
+  const docRef = await addDoc(collection(db, "users", item.uid, "items"), {
     ...item,
     status: "listed",
     createdAt: serverTimestamp(),
@@ -72,9 +70,9 @@ export async function addItem(
 }
 
 // 売れた！マーク
-export async function markAsSold(itemId: string): Promise<void> {
+export async function markAsSold(uid: string, itemId: string): Promise<void> {
   const db = getFirebaseDb();
-  const ref = doc(db, "items", itemId);
+  const ref = doc(db, "users", uid, "items", itemId);
   await updateDoc(ref, {
     status: "sold",
     soldAt: serverTimestamp(),
