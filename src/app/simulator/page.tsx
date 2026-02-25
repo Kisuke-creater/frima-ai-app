@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
   getFirestoreClientErrorMessage,
@@ -35,6 +35,7 @@ function gramsToKgInputString(value?: number): string {
 
 export default function SimulatorPage() {
   const { user } = useAuth();
+
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -50,7 +51,7 @@ export default function SimulatorPage() {
   const [lengthCmInput, setLengthCmInput] = useState("");
   const [widthCmInput, setWidthCmInput] = useState("");
   const [heightCmInput, setHeightCmInput] = useState("");
-  const [weightGInput, setWeightGInput] = useState("");
+  const [weightKgInput, setWeightKgInput] = useState("");
   const [packagingMaterialId, setPackagingMaterialId] = useState("none");
 
   const lastInitializedItemId = useRef<string | null>(null);
@@ -67,13 +68,16 @@ export default function SimulatorPage() {
 
   useEffect(() => {
     if (!user) return;
+
     setLoading(true);
     getItems(user.uid)
       .then((data) => {
         setItems(data);
         setError("");
       })
-      .catch((e: unknown) => setError(getFirestoreClientErrorMessage(e)))
+      .catch((e: unknown) => {
+        setError(getFirestoreClientErrorMessage(e));
+      })
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -84,7 +88,7 @@ export default function SimulatorPage() {
       setLengthCmInput("");
       setWidthCmInput("");
       setHeightCmInput("");
-      setWeightGInput("");
+      setWeightKgInput("");
       setPackagingMaterialId("none");
       setResult(null);
       setError("");
@@ -93,29 +97,24 @@ export default function SimulatorPage() {
       return;
     }
 
-    // Only populate fields if this is a newly selected item (prevents clearing results on update)
-    if (lastInitializedItemId.current !== selectedItem.id) {
-      setSellingPriceInput(String(selectedItem.price ?? ""));
-      setMarketplaceInput(selectedItem.marketplace ?? "");
-      setLengthCmInput(toInputString(selectedItem.shippingSpec?.lengthCm));
-      setWidthCmInput(toInputString(selectedItem.shippingSpec?.widthCm));
-      setHeightCmInput(toInputString(selectedItem.shippingSpec?.heightCm));
-      setWeightGInput(gramsToKgInputString(selectedItem.shippingSpec?.weightG));
-      setPackagingMaterialId(
-        selectedItem.shippingSpec?.packagingMaterialId ?? "none",
-      );
-      setResult(null);
-      setError("");
-      setWarning("");
+    if (lastInitializedItemId.current === selectedItem.id) return;
 
-      lastInitializedItemId.current = selectedItem.id ?? null;
-    }
+    setSellingPriceInput(String(selectedItem.price ?? ""));
+    setMarketplaceInput(selectedItem.marketplace ?? "");
+    setLengthCmInput(toInputString(selectedItem.shippingSpec?.lengthCm));
+    setWidthCmInput(toInputString(selectedItem.shippingSpec?.widthCm));
+    setHeightCmInput(toInputString(selectedItem.shippingSpec?.heightCm));
+    setWeightKgInput(gramsToKgInputString(selectedItem.shippingSpec?.weightG));
+    setPackagingMaterialId(selectedItem.shippingSpec?.packagingMaterialId ?? "none");
+    setResult(null);
+    setError("");
+    setWarning("");
+    lastInitializedItemId.current = selectedItem.id ?? null;
   }, [selectedItem]);
 
   const effectiveMarketplace = (marketplaceInput ||
     selectedItem?.marketplace ||
     "") as MarketplaceOption;
-  const needsMarketplaceSelection = !selectedItem?.marketplace;
   const selectedPackagingMaterial =
     PACKAGING_MATERIAL_MAP[packagingMaterialId] ?? PACKAGING_MATERIAL_MAP.none;
 
@@ -126,7 +125,7 @@ export default function SimulatorPage() {
       return null;
     }
     if (value <= 0) {
-      setError(`${label}は0より大きい値で入力してください。`);
+      setError(`${label}は0より大きい数値で入力してください。`);
       return null;
     }
     return value;
@@ -134,7 +133,7 @@ export default function SimulatorPage() {
 
   const handleRunSimulation = async () => {
     if (!user) {
-      setError("ログイン状態を確認できません。再ログインしてお試しください。");
+      setError("ログイン状態を確認してください。再ログイン後にお試しください。");
       return;
     }
     if (!selectedItem?.id) {
@@ -150,7 +149,8 @@ export default function SimulatorPage() {
     const lengthCm = parsePositive(lengthCmInput, "縦サイズ");
     const widthCm = parsePositive(widthCmInput, "横サイズ");
     const heightCm = parsePositive(heightCmInput, "厚さ");
-    const weightKg = parsePositive(weightGInput, "重量（kg）");
+    const weightKg = parsePositive(weightKgInput, "重量（kg）");
+
     if (
       sellingPrice == null ||
       lengthCm == null ||
@@ -161,13 +161,12 @@ export default function SimulatorPage() {
       return;
     }
 
-    if (!effectiveMarketplace) {
-      setError("プラットフォームを選択してください。");
+    if (!compareAllPlatforms && !effectiveMarketplace) {
+      setError("比較するプラットフォームを選択してください。");
       return;
     }
 
     const weightG = Math.round(weightKg * 1000);
-
     const shippingSpec = {
       lengthCm,
       widthCm,
@@ -184,11 +183,12 @@ export default function SimulatorPage() {
         compareAllPlatforms,
         marketplaceSelection: compareAllPlatforms
           ? undefined
-          : effectiveMarketplace,
+          : effectiveMarketplace || undefined,
         shippingSpec,
       });
 
       setResult(nextResult);
+
       if (nextResult.candidates.length === 0) {
         setError(
           "条件に合う配送方法が見つかりませんでした。サイズ・重量を見直してください。",
@@ -197,14 +197,20 @@ export default function SimulatorPage() {
 
       try {
         await updateItemSimulationInputs(user.uid, selectedItem.id, {
-          marketplace: effectiveMarketplace,
+          marketplace: effectiveMarketplace || undefined,
           shippingSpec,
         });
 
         setItems((prev) =>
           prev.map((item) =>
             item.id === selectedItem.id
-              ? { ...item, marketplace: effectiveMarketplace, shippingSpec }
+              ? {
+                  ...item,
+                  marketplace: (effectiveMarketplace || item.marketplace) as
+                    | Marketplace
+                    | undefined,
+                  shippingSpec,
+                }
               : item,
           ),
         );
@@ -227,7 +233,8 @@ export default function SimulatorPage() {
       <div className="page-header">
         <h1>利益シミュレーション</h1>
         <p>
-          出品中の商品ごとに、プラットフォーム手数料・送料・資材費を比較して利益を試算します。
+          出品中の商品を選択し、プラットフォーム手数料・送料・配送資材費を含めた
+          想定利益を比較できます。
         </p>
       </div>
 
@@ -256,11 +263,13 @@ export default function SimulatorPage() {
                 disabled={loading}
               >
                 <option value="">
-                  {loading ? "読み込み中..." : "出品中の商品を選択してください"}
+                  {loading
+                    ? "商品を読み込み中..."
+                    : "出品中の商品を選択してください"}
                 </option>
                 {listedItems.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.title}（{formatYen(item.price)}）
+                    {item.title} / {formatYen(item.price ?? 0)}
                   </option>
                 ))}
               </select>
@@ -268,7 +277,7 @@ export default function SimulatorPage() {
           </div>
 
           <div className="card">
-            <div className="card-title">シミュレーション条件</div>
+            <div className="card-title">試算条件</div>
             <div className="sim-field-grid">
               <div className="form-group">
                 <label className="form-label">販売価格（円）</label>
@@ -298,9 +307,9 @@ export default function SimulatorPage() {
 
               <div className="form-group">
                 <label className="form-label">
-                  商品のプラットフォーム（保存）
-                  {needsMarketplaceSelection && (
-                    <span className="sim-required">必須</span>
+                  商品のプラットフォーム
+                  {!selectedItem?.marketplace && (
+                    <span className="sim-required">未設定</span>
                   )}
                 </label>
                 <select
@@ -322,11 +331,11 @@ export default function SimulatorPage() {
 
               {!compareAllPlatforms && (
                 <div className="sim-note-row">
-                  比較対象は
+                  現在は
                   {effectiveMarketplace
                     ? `「${getMarketplaceLabel(effectiveMarketplace)}」`
-                    : "選択したプラットフォーム"}
-                  のみです。
+                    : "プラットフォーム未選択"}
+                  のみ比較します。
                 </div>
               )}
 
@@ -379,8 +388,8 @@ export default function SimulatorPage() {
                   type="number"
                   min={0}
                   step="0.001"
-                  value={weightGInput}
-                  onChange={(e) => setWeightGInput(e.target.value)}
+                  value={weightKgInput}
+                  onChange={(e) => setWeightKgInput(e.target.value)}
                   placeholder="例: 0.38"
                   disabled={!selectedItem}
                 />
@@ -424,11 +433,10 @@ export default function SimulatorPage() {
           {!result && (
             <div className="card">
               <div className="empty-state" style={{ padding: "28px 20px" }}>
-                <div className="empty-icon">📦</div>
                 <p>
                   商品を選択してサイズ・重量・配送資材を入力すると、
                   <br />
-                  利益比較結果を表示します。
+                  利益比較の結果を表示します。
                 </p>
               </div>
             </div>
@@ -437,11 +445,12 @@ export default function SimulatorPage() {
           {result?.recommended && (
             <div className="card sim-recommend-card">
               <div className="sim-recommend-header">
-                <span className="sim-kicker">推奨候補</span>
+                <span className="sim-kicker">おすすめ候補</span>
                 <div className="sim-profit-value">
                   想定利益 {formatYen(result.recommended.profit)}
                 </div>
               </div>
+
               <div className="sim-summary-grid">
                 <div>
                   <span>プラットフォーム</span>
@@ -456,20 +465,16 @@ export default function SimulatorPage() {
                   <strong>{result.recommended.packagingMaterialLabel}</strong>
                 </div>
               </div>
+
               <div className="sim-breakdown">
                 <span>手数料: {formatYen(result.recommended.platformFee)}</span>
                 <span>送料: {formatYen(result.recommended.shippingFee)}</span>
-                <span>
-                  資材費: {formatYen(result.recommended.packagingCost)}
-                </span>
-                <span>
-                  合計コスト: {formatYen(result.recommended.totalCost)}
-                </span>
+                <span>資材費: {formatYen(result.recommended.packagingCost)}</span>
+                <span>合計コスト: {formatYen(result.recommended.totalCost)}</span>
               </div>
+
               {result.recommended.note && (
-                <p className="sim-helper-note">
-                  備考: {result.recommended.note}
-                </p>
+                <p className="sim-helper-note">備考: {result.recommended.note}</p>
               )}
             </div>
           )}
@@ -477,6 +482,7 @@ export default function SimulatorPage() {
           {result && (
             <div className="card">
               <div className="card-title">比較結果（利益順）</div>
+
               {result.candidates.length === 0 ? (
                 <p className="sim-helper-note">
                   条件に一致する配送方法がありません。サイズ・重量を見直してください。
@@ -511,9 +517,7 @@ export default function SimulatorPage() {
                           <td>{formatYen(candidate.totalCost)}</td>
                           <td
                             className={
-                              candidate.profit < 0
-                                ? "sim-negative"
-                                : "sim-positive"
+                              candidate.profit < 0 ? "sim-negative" : "sim-positive"
                             }
                           >
                             {formatYen(candidate.profit)}

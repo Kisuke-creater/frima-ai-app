@@ -1,20 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import {
   deleteItems,
   getItems,
   getFirestoreClientErrorMessage,
   markAsSold,
-  Item,
+  type Item,
 } from "@/lib/firestore";
-import Link from "next/link";
 
 type Tab = "listed" | "sold";
 
+function formatYen(value: number): string {
+  return `¥${value.toLocaleString("ja-JP")}`;
+}
+
 export default function ItemsPage() {
   const { user } = useAuth();
+
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("listed");
@@ -30,12 +35,13 @@ export default function ItemsPage() {
 
   const fetchItems = async () => {
     if (!user) return;
+
     try {
       setError("");
       const data = await getItems(user.uid);
       setItems(data);
       setSelectedItemIds((prev) =>
-        prev.filter((id) => data.some((item) => item.id === id))
+        prev.filter((id) => data.some((item) => item.id === id)),
       );
     } catch (e: unknown) {
       setError(getFirestoreClientErrorMessage(e));
@@ -47,6 +53,31 @@ export default function ItemsPage() {
     fetchItems().finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  const listedCount = useMemo(
+    () => items.filter((item) => item.status === "listed").length,
+    [items],
+  );
+  const soldCount = useMemo(
+    () => items.filter((item) => item.status === "sold").length,
+    [items],
+  );
+
+  const filtered = useMemo(
+    () => items.filter((item) => item.status === tab),
+    [items, tab],
+  );
+  const filteredIds = useMemo(
+    () => filtered.flatMap((item) => (item.id ? [item.id] : [])),
+    [filtered],
+  );
+  const selectedIdSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
+  const selectedFilteredIds = useMemo(
+    () => filteredIds.filter((id) => selectedIdSet.has(id)),
+    [filteredIds, selectedIdSet],
+  );
+  const allFilteredSelected =
+    filteredIds.length > 0 && selectedFilteredIds.length === filteredIds.length;
 
   const openSoldDialog = (item: Item) => {
     setSellDialogItem(item);
@@ -64,7 +95,7 @@ export default function ItemsPage() {
 
   const submitSoldDialog = async () => {
     if (!user) {
-      setError("ログイン状態を確認できません。再ログインしてお試しください。");
+      setError("ログイン状態を確認してください。再ログイン後にお試しください。");
       return;
     }
     if (!sellDialogItem?.id) return;
@@ -90,18 +121,11 @@ export default function ItemsPage() {
     }
   };
 
-  const filtered = items.filter((i) => i.status === tab);
-  const filteredIds = filtered.flatMap((i) => (i.id ? [i.id] : []));
-  const selectedIdSet = new Set(selectedItemIds);
-  const selectedFilteredIds = filteredIds.filter((id) => selectedIdSet.has(id));
-  const allFilteredSelected =
-    filteredIds.length > 0 && selectedFilteredIds.length === filteredIds.length;
-
   const toggleItemSelection = (itemId: string) => {
     setSelectedItemIds((prev) =>
       prev.includes(itemId)
         ? prev.filter((id) => id !== itemId)
-        : [...prev, itemId]
+        : [...prev, itemId],
     );
   };
 
@@ -118,22 +142,17 @@ export default function ItemsPage() {
 
   const deleteSelectedInTab = async () => {
     if (!user) {
-      setError("ログイン状態を確認できません。再ログインしてお試しください。");
+      setError("ログイン状態を確認してください。再ログイン後にお試しください。");
       return;
     }
     if (selectedFilteredIds.length === 0) return;
-
-    const confirmed = window.confirm(
-      `「${tab === "listed" ? "出品中" : "売却済み"}」タブの選択済み ${selectedFilteredIds.length} 件を削除します。よろしいですか？`
-    );
-    if (!confirmed) return;
 
     setDeleteLoading(true);
     try {
       setError("");
       await deleteItems(user.uid, selectedFilteredIds);
       setSelectedItemIds((prev) =>
-        prev.filter((id) => !selectedFilteredIds.includes(id))
+        prev.filter((id) => !selectedFilteredIds.includes(id)),
       );
       await fetchItems();
     } catch (e: unknown) {
@@ -146,17 +165,13 @@ export default function ItemsPage() {
   const conditionLabel: Record<string, string> = {
     new: "新品・未使用",
     like_new: "未使用に近い",
-    good: "目立った傷なし",
-    fair: "やや傷あり",
-    poor: "全体的に傷あり",
+    good: "目立った傷や汚れなし",
+    fair: "やや傷や汚れあり",
+    poor: "全体的に状態が悪い",
   };
 
-  const formatPrice = (item: Item) =>
-    `¥${(
-      (item.status === "sold" ? item.soldPrice : item.price) ??
-      item.price ??
-      0
-    ).toLocaleString()}`;
+  const formatItemPrice = (item: Item) =>
+    formatYen((item.status === "sold" ? item.soldPrice : item.price) ?? item.price ?? 0);
 
   return (
     <div className="fade-in">
@@ -166,6 +181,8 @@ export default function ItemsPage() {
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
         <div>
@@ -173,7 +190,7 @@ export default function ItemsPage() {
           <p>出品中・売却済みの商品をまとめて管理できます。</p>
         </div>
         <Link href="/generate" className="btn btn-primary">
-          ＋ AI生成で追加
+          AI生成で追加
         </Link>
       </div>
 
@@ -184,13 +201,13 @@ export default function ItemsPage() {
           className={`tab-btn ${tab === "listed" ? "active" : ""}`}
           onClick={() => setTab("listed")}
         >
-          出品中 ({items.filter((i) => i.status === "listed").length})
+          出品中 ({listedCount})
         </button>
         <button
           className={`tab-btn ${tab === "sold" ? "active" : ""}`}
           onClick={() => setTab("sold")}
         >
-          売却済み ({items.filter((i) => i.status === "sold").length})
+          売却済み ({soldCount})
         </button>
       </div>
 
@@ -259,14 +276,14 @@ export default function ItemsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">{tab === "listed" ? "📭" : "🎉"}</div>
-          <p>{tab === "listed" ? "出品中の商品はまだありません" : "売却済みの商品はまだありません"}</p>
+          <div className="empty-icon">{tab === "listed" ? "📦" : "✅"}</div>
+          <p>
+            {tab === "listed"
+              ? "出品中の商品はまだありません"
+              : "売却済みの商品はまだありません"}
+          </p>
           {tab === "listed" && (
-            <Link
-              href="/generate"
-              className="btn btn-primary"
-              style={{ marginTop: 16 }}
-            >
+            <Link href="/generate" className="btn btn-primary" style={{ marginTop: 16 }}>
               AI生成で出品する
             </Link>
           )}
@@ -280,6 +297,7 @@ export default function ItemsPage() {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "flex-start",
+                  gap: 8,
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -297,7 +315,11 @@ export default function ItemsPage() {
                         checked={selectedIdSet.has(item.id)}
                         onChange={() => toggleItemSelection(item.id!)}
                         disabled={deleteLoading}
-                        style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
+                        style={{
+                          width: 16,
+                          height: 16,
+                          accentColor: "var(--accent)",
+                        }}
                       />
                     </label>
                   )}
@@ -329,19 +351,23 @@ export default function ItemsPage() {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  gap: 8,
                 }}
               >
                 <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                   状態: {conditionLabel[item.condition] ?? item.condition}
                 </span>
-                <div className="item-price">{formatPrice(item)}</div>
+                <div className="item-price">{formatItemPrice(item)}</div>
               </div>
 
               {item.createdAt && (
                 <div className="item-meta">
                   登録日: {item.createdAt.toDate().toLocaleDateString("ja-JP")}
                   {item.soldAt && (
-                    <> | 売却日: {item.soldAt.toDate().toLocaleDateString("ja-JP")}</>
+                    <>
+                      {" "}
+                      | 売却日: {item.soldAt.toDate().toLocaleDateString("ja-JP")}
+                    </>
                   )}
                 </div>
               )}
@@ -378,14 +404,14 @@ export default function ItemsPage() {
         >
           <div className="sell-dialog-card" onClick={(e) => e.stopPropagation()}>
             <div className="sell-dialog-header">
-              <p className="sell-dialog-kicker">実売額</p>
+              <p className="sell-dialog-kicker">実売額入力</p>
               <h2 id="sell-dialog-title">実売額を入力</h2>
               <p className="sell-dialog-item-title">{sellDialogItem.title}</p>
             </div>
 
             <div className="sell-dialog-field">
               <label htmlFor="sold-price-input" className="sell-dialog-label">
-                販売価格（円）
+                実売額（円）
               </label>
               <div className="sell-dialog-input-shell">
                 <span className="sell-dialog-yen" aria-hidden="true">
@@ -416,7 +442,7 @@ export default function ItemsPage() {
                 />
               </div>
               <p className="sell-dialog-help">
-                入力した実売額は売上集計とグラフに反映されます。
+                入力した実売額が売上集計とグラフに反映されます。
               </p>
             </div>
 
