@@ -2,18 +2,25 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { getItems, Item } from "@/lib/firestore";
+import { getItems, getFirestoreClientErrorMessage, Item } from "@/lib/firestore";
 import Link from "next/link";
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!user) return;
     getItems(user.uid)
-      .then(setItems)
+      .then((data) => {
+        setItems(data);
+        setError("");
+      })
+      .catch((e: unknown) => {
+        setError(getFirestoreClientErrorMessage(e));
+      })
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -51,6 +58,8 @@ export default function DashboardPage() {
         <h1>ダッシュボード</h1>
         <p>フリマ出品の概要を確認できます</p>
       </div>
+
+      {error && <p className="error-msg">{error}</p>}
 
       {/* Stats */}
       <div className="stats-grid">

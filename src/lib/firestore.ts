@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
+import { FirebaseError } from "firebase/app";
 import { getFirebaseDb } from "./firebase";
 
 export interface Item {
@@ -23,6 +24,25 @@ export interface Item {
   status: "listed" | "sold";
   createdAt?: Timestamp;
   soldAt?: Timestamp | null;
+}
+
+export function getFirestoreClientErrorMessage(error: unknown): string {
+  if (error instanceof FirebaseError) {
+    if (error.code === "permission-denied") {
+      return "Firestore access was denied. Check Firestore Security Rules and make sure the signed-in user is allowed to read/write items.";
+    }
+    if (error.code === "unauthenticated") {
+      return "You are not authenticated. Please sign in again and retry.";
+    }
+
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "An unexpected Firestore error occurred.";
 }
 
 // 商品一覧取得

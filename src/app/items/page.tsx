@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { getItems, markAsSold, Item } from "@/lib/firestore";
+import {
+  getItems,
+  getFirestoreClientErrorMessage,
+  markAsSold,
+  Item,
+} from "@/lib/firestore";
 import Link from "next/link";
 
 type Tab = "listed" | "sold";
@@ -13,11 +18,17 @@ export default function ItemsPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("listed");
   const [soldLoading, setSoldLoading] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   const fetchItems = async () => {
     if (!user) return;
-    const data = await getItems(user.uid);
-    setItems(data);
+    try {
+      setError("");
+      const data = await getItems(user.uid);
+      setItems(data);
+    } catch (e: unknown) {
+      setError(getFirestoreClientErrorMessage(e));
+    }
   };
 
   useEffect(() => {
@@ -31,8 +42,11 @@ export default function ItemsPage() {
     if (!confirm(`「${item.title}」を売れた！にしますか？`)) return;
     setSoldLoading(item.id);
     try {
+      setError("");
       await markAsSold(item.id);
       await fetchItems();
+    } catch (e: unknown) {
+      setError(getFirestoreClientErrorMessage(e));
     } finally {
       setSoldLoading(null);
     }
@@ -59,6 +73,8 @@ export default function ItemsPage() {
           ＋ AI生成で追加
         </Link>
       </div>
+
+      {error && <p className="error-msg">{error}</p>}
 
       {/* Tabs */}
       <div className="tab-bar">

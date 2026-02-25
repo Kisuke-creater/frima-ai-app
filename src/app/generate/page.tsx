@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { addItem } from "@/lib/firestore";
+import { addItem, getFirestoreClientErrorMessage } from "@/lib/firestore";
 import { useRouter } from "next/navigation";
 
 const CONDITIONS = [
@@ -170,8 +170,13 @@ export default function GeneratePage() {
   };
 
   const handleSave = async () => {
-    if (!result || !selectedPrice || !user) return;
+    if (!result || !selectedPrice) return;
+    if (!user) {
+      setError("You are not signed in. Please sign in again and retry.");
+      return;
+    }
     setSaving(true);
+    setError("");
     try {
       await addItem({
         uid: user.uid,
@@ -183,8 +188,9 @@ export default function GeneratePage() {
         status: "listed",
       });
       router.push("/items");
-    } catch {
+    } catch (e: unknown) {
       setError("保存に失敗しました");
+      setError(getFirestoreClientErrorMessage(e));
       setSaving(false);
     }
   };
