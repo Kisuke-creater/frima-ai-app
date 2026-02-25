@@ -48,21 +48,66 @@ function getTargetMarketplaces(input: SimulationInput): Marketplace[] {
   return input.marketplaceSelection ? [input.marketplaceSelection] : [];
 }
 
+function getTierFamilyKey(method: ShippingMethod): string | null {
+  // Generic parcel tiers (60/80/100...) should only show the smallest fitting tier.
+  if (/^general_\d+$/.test(method.id)) return "general";
+  return null;
+}
+
+function getTierOrder(method: ShippingMethod): number {
+  const match = method.id.match(/_(\d+)$/);
+  return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+}
+
+function selectAppropriateSizedMethods(methods: ShippingMethod[]): ShippingMethod[] {
+  const selected: ShippingMethod[] = [];
+  const bestByFamily = new Map<string, ShippingMethod>();
+
+  for (const method of methods) {
+    const familyKey = getTierFamilyKey(method);
+    if (!familyKey) {
+      selected.push(method);
+      continue;
+    }
+
+    const existing = bestByFamily.get(familyKey);
+    if (!existing) {
+      bestByFamily.set(familyKey, method);
+      continue;
+    }
+
+    const methodTier = getTierOrder(method);
+    const existingTier = getTierOrder(existing);
+    if (
+      methodTier < existingTier ||
+      (methodTier === existingTier && method.shippingFee < existing.shippingFee)
+    ) {
+      bestByFamily.set(familyKey, method);
+    }
+  }
+
+  return [...selected, ...bestByFamily.values()];
+}
+
 export function calculateSimulation(input: SimulationInput): SimulationResult {
   const marketplaces = getTargetMarketplaces(input);
   const candidates: SimulationCandidate[] = [];
 
   for (const marketplace of marketplaces) {
     const feeRule = PLATFORM_FEE_RULES[marketplace];
+    const compatibleMethods = selectAppropriateSizedMethods(
+      SHIPPING_METHODS.filter((method) => {
+        if (
+          method.availablePlatforms &&
+          !method.availablePlatforms.includes(marketplace)
+        ) {
+          return false;
+        }
+        return fitsShippingMethod(method, input.shippingSpec);
+      })
+    );
 
-    for (const method of SHIPPING_METHODS) {
-      if (
-        method.availablePlatforms &&
-        !method.availablePlatforms.includes(marketplace)
-      ) {
-        continue;
-      }
-      if (!fitsShippingMethod(method, input.shippingSpec)) continue;
+    for (const method of compatibleMethods) {
 
       const packagingMaterial =
         PACKAGING_MATERIAL_MAP[input.shippingSpec.packagingMaterialId] ??
@@ -102,4 +147,3 @@ export function calculateSimulation(input: SimulationInput): SimulationResult {
     recommended: candidates[0],
   };
 }
-
