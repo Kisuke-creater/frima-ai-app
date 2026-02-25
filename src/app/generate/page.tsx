@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { addItem, getFirestoreClientErrorMessage } from "@/lib/firestore";
 import { useRouter } from "next/navigation";
+import type { Marketplace } from "@/lib/simulation/types";
 
 const CONDITIONS = [
   { value: "new", label: "新品・未使用" },
@@ -39,7 +40,7 @@ export default function GeneratePage() {
   const [itemName, setItemName] = useState("");
   const [accessories, setAccessories] = useState("");
   const [condition, setCondition] = useState("good");
-  const [marketplace, setMarketplace] = useState("mercari");
+  const [marketplace, setMarketplace] = useState<Marketplace>("mercari");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<GenerateResult | null>(null);
@@ -185,6 +186,7 @@ export default function GeneratePage() {
         category: result.category,
         condition,
         price: selectedPrice,
+        marketplace,
         status: "listed",
       });
       router.push("/items");
@@ -300,7 +302,7 @@ export default function GeneratePage() {
               <select
                 className="form-control"
                 value={marketplace}
-                onChange={(e) => setMarketplace(e.target.value)}
+                onChange={(e) => setMarketplace(e.target.value as Marketplace)}
               >
                 {MARKETPLACES.map((m) => (
                   <option key={m.value} value={m.value}>

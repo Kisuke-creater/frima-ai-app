@@ -4,6 +4,7 @@ import {
   getDocs,
   doc,
   updateDoc,
+  deleteDoc,
   query,
   orderBy,
   serverTimestamp,
@@ -11,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { FirebaseError } from "firebase/app";
 import { getFirebaseDb } from "./firebase";
+import type { Marketplace, ShippingSpec } from "./simulation/types";
 
 export interface Item {
   id?: string;
@@ -20,9 +22,12 @@ export interface Item {
   category: string;
   condition: string;
   price: number;
+  marketplace?: Marketplace;
   status: "listed" | "sold";
   createdAt?: Timestamp;
   soldAt?: Timestamp | null;
+  soldPrice?: number | null;
+  shippingSpec?: ShippingSpec;
 }
 
 export function getFirestoreClientErrorMessage(error: unknown): string {
@@ -57,7 +62,7 @@ export async function getItems(uid: string): Promise<Item[]> {
 
 // 商品追加
 export async function addItem(
-  item: Omit<Item, "id" | "createdAt" | "soldAt">
+  item: Omit<Item, "id" | "createdAt" | "soldAt" | "soldPrice">
 ): Promise<string> {
   const db = getFirebaseDb();
   const docRef = await addDoc(collection(db, "users", item.uid, "items"), {
@@ -65,16 +70,52 @@ export async function addItem(
     status: "listed",
     createdAt: serverTimestamp(),
     soldAt: null,
+    soldPrice: null,
   });
   return docRef.id;
 }
 
 // 売れた！マーク
-export async function markAsSold(uid: string, itemId: string): Promise<void> {
+export async function markAsSold(
+  uid: string,
+  itemId: string,
+  soldPrice: number
+): Promise<void> {
   const db = getFirebaseDb();
   const ref = doc(db, "users", uid, "items", itemId);
   await updateDoc(ref, {
     status: "sold",
     soldAt: serverTimestamp(),
+    soldPrice,
   });
+}
+
+export async function deleteItems(uid: string, itemIds: string[]): Promise<void> {
+  const db = getFirebaseDb();
+  await Promise.all(
+    itemIds.map((itemId) => deleteDoc(doc(db, "users", uid, "items", itemId)))
+  );
+}
+
+export async function updateItemSimulationInputs(
+  uid: string,
+  itemId: string,
+  payload: {
+    marketplace?: Marketplace;
+    shippingSpec?: ShippingSpec;
+  }
+): Promise<void> {
+  const db = getFirebaseDb();
+  const ref = doc(db, "users", uid, "items", itemId);
+  const updatePayload: Record<string, unknown> = {};
+
+  if (payload.marketplace) {
+    updatePayload.marketplace = payload.marketplace;
+  }
+  if (payload.shippingSpec) {
+    updatePayload.shippingSpec = payload.shippingSpec;
+  }
+
+  if (Object.keys(updatePayload).length === 0) return;
+  await updateDoc(ref, updatePayload);
 }

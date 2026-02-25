@@ -27,7 +27,10 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const listed = items.filter((i) => i.status === "listed");
     const sold = items.filter((i) => i.status === "sold");
-    const totalSales = sold.reduce((sum, i) => sum + (i.price ?? 0), 0);
+    const totalSales = sold.reduce(
+      (sum, i) => sum + (i.soldPrice ?? i.price ?? 0),
+      0
+    );
     return { listed: listed.length, sold: sold.length, totalSales };
   }, [items]);
 
@@ -45,7 +48,7 @@ export default function DashboardPage() {
       .forEach((i) => {
         const d = i.soldAt!.toDate();
         const key = `${d.getMonth() + 1}月`;
-        if (key in months) months[key] += i.price ?? 0;
+        if (key in months) months[key] += i.soldPrice ?? i.price ?? 0;
       });
     return Object.entries(months).map(([month, value]) => ({ month, value }));
   }, [items]);
@@ -152,7 +155,7 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
                   <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-light)" }}>
-                    ¥{(item.price ?? 0).toLocaleString()}
+                    ¥{((item.status === "sold" ? item.soldPrice : item.price) ?? item.price ?? 0).toLocaleString()}
                   </div>
                   <span className={`item-badge ${item.status}`}>
                     {item.status === "listed" ? "出品中" : "売却済"}

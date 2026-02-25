@@ -10,14 +10,12 @@ function NavLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // クライアントサイド認証チェック
   useEffect(() => {
     if (!loading && !user && pathname !== "/login") {
       router.push("/login");
     }
   }, [user, loading, pathname, router]);
 
-  // ログインページはナビなし
   if (pathname === "/login") {
     return <>{children}</>;
   }
@@ -35,17 +33,17 @@ function NavLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/dashboard", icon: "📊", label: "ダッシュボード" },
-    { href: "/generate", icon: "🤖", label: "AI生成" },
+    { href: "/generate", icon: "✨", label: "AI生成" },
     { href: "/items", icon: "📦", label: "商品一覧" },
+    { href: "/simulator", icon: "🧮", label: "利益シミュレーション" },
     { href: "/settings", icon: "⚙️", label: "設定" },
   ];
 
   return (
     <div className="app-layout">
-      {/* Desktop sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <span>🏷️</span>
+          <span>🤖</span>
           <h2>フリマAI</h2>
         </div>
         {navItems.map((item) => (
@@ -59,16 +57,22 @@ function NavLayout({ children }: { children: React.ReactNode }) {
           </Link>
         ))}
         <div className="sidebar-bottom">
-          <div style={{ padding: "8px 12px", fontSize: "12px", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <div
+            style={{
+              padding: "8px 12px",
+              fontSize: "12px",
+              color: "var(--text-muted)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
             {user.displayName || user.email || "ゲスト"}
           </div>
         </div>
       </aside>
 
-      {/* Main */}
       <main className="main-content">{children}</main>
 
-      {/* Mobile bottom nav */}
       <nav className="mobile-nav">
         {navItems.map((item) => (
           <Link
@@ -96,3 +100,4 @@ export default function ClientLayout({
     </AuthProvider>
   );
 }
+
