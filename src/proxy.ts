@@ -21,7 +21,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Firebase AuthはクライアントサイドなのでCookieで判定
+  // Supabase Auth token is stored in cookie and checked here.
   const token = request.cookies.get("auth-token")?.value;
 
   if (!token) {

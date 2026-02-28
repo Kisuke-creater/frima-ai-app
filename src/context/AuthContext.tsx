@@ -6,41 +6,74 @@ import React, {
   useEffect,
   useState,
   ReactNode,
+  useCallback,
 } from "react";
-import { User, onAuthStateChanged, signOut } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase";
+import { clearAuthTokenCookie, getAuthTokenFromCookie } from "@/lib/auth-cookie";
+import {
+  AuthUser,
+  getUserFromAccessToken,
+  signOutWithAccessToken,
+} from "@/lib/supabase-auth";
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
+  refreshUser: () => Promise<AuthUser | null>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  refreshUser: async () => null,
   logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const auth = getFirebaseAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+  const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
+    const token = getAuthTokenFromCookie();
+    if (!token) {
+      setUser(null);
       setLoading(false);
-    });
-    return unsubscribe;
+      return null;
+    }
+
+    setLoading(true);
+    try {
+      const nextUser = await getUserFromAccessToken(token);
+      setUser(nextUser);
+      return nextUser;
+    } catch {
+      clearAuthTokenCookie();
+      setUser(null);
+      return null;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    void refreshUser();
+  }, [refreshUser]);
+
   const logout = async () => {
-    await signOut(getFirebaseAuth());
+    const token = getAuthTokenFromCookie();
+    if (token) {
+      try {
+        await signOutWithAccessToken(token);
+      } catch {
+        // Ignore sign-out API errors and clear local session regardless.
+      }
+    }
+    clearAuthTokenCookie();
+    setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider value={{ user, loading, refreshUser, logout }}>
       {children}
     </AuthContext.Provider>
   );
