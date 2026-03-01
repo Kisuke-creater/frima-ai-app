@@ -7,6 +7,7 @@ Set these in `.env.local`:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_AUTH_REDIRECT_TO=http://localhost:3000/login
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 NEXT_PUBLIC_SUPABASE_ITEMS_TABLE=items
 ```
@@ -29,7 +30,13 @@ In Supabase Dashboard:
 1. Go to `Authentication > Providers`
 2. Enable `Email` (and `Google` if needed)
 3. Go to `Authentication > Sign In / Providers > Email` and enable email confirmation (confirm email)
-4. Set redirect URL to your app login callback URL (for local: `http://localhost:3000/login`)
+4. In `Authentication > URL Configuration`, set:
+   - Site URL: your actual app URL
+   - Redirect URLs:
+     - `http://localhost:3000/login` (PC local)
+     - `http://<your-pc-lan-ip>:3000/login` (mobile on same Wi-Fi)
+     - `https://your-domain/login` (production)
+5. If mobile still fails, open in Safari/Chrome directly (not in-app browser).
 
 ## 4. API
 

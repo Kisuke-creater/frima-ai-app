@@ -42,9 +42,11 @@ function getAuthConfig(): AuthConfig {
 
 export function buildGoogleOAuthUrl(redirectTo: string): string {
   const { url, anonKey } = getAuthConfig();
+  const configuredRedirectTo = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO;
+  const resolvedRedirectTo = configuredRedirectTo?.trim() || redirectTo;
   const params = new URLSearchParams({
     provider: "google",
-    redirect_to: redirectTo,
+    redirect_to: resolvedRedirectTo,
     flow_type: "implicit",
   });
 

@@ -7,6 +7,20 @@ import { setAuthTokenCookie } from "@/lib/auth-cookie";
 import { useAuth } from "@/context/AuthContext";
 import { buildGoogleOAuthUrl, signInWithEmailPassword } from "@/lib/supabase-auth";
 
+function getOAuthParams(): URLSearchParams {
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const search = window.location.search.startsWith("?")
+    ? window.location.search.slice(1)
+    : window.location.search;
+
+  const merged = new URLSearchParams(search);
+  const hashParams = new URLSearchParams(hash);
+  hashParams.forEach((value, key) => merged.set(key, value));
+  return merged;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { refreshUser } = useAuth();
@@ -21,29 +35,29 @@ export default function LoginPage() {
   const trimmedEmail = email.trim();
   const canSubmit = useMemo(
     () => trimmedEmail.length > 0 && password.length > 0,
-    [trimmedEmail.length, password.length]
+    [trimmedEmail, password]
   );
 
   useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash) return;
-
-    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    const params = getOAuthParams();
     const accessToken = params.get("access_token");
     const expiresInRaw = params.get("expires_in");
     const oauthError = params.get("error_description") || params.get("error");
 
+    if (!accessToken && !oauthError) return;
+
     if (oauthError) {
-      setError(oauthError);
+      setError(
+        decodeURIComponent(oauthError).replace(/\+/g, " ") ||
+          "Googleログインに失敗しました。"
+      );
       window.history.replaceState({}, document.title, window.location.pathname);
+      setGoogleLoading(false);
       return;
     }
 
-    if (!accessToken) return;
-
     const expiresIn = Number(expiresInRaw ?? "3600");
     const safeExpiresIn = Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3600;
-
     setAuthTokenCookie(accessToken, safeExpiresIn);
     window.history.replaceState({}, document.title, window.location.pathname);
 
