@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
     const extraInfoText = extraInfo.length > 0 ? `\n${extraInfo.join("\n")}` : "";
 
-    const content: Array<Record<string, unknown>> = images.map((img) => ({
+    const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = images.map((img) => ({
       type: "image_url",
       image_url: {
         url: `data:${img.mimeType};base64,${img.imageBase64}`,
