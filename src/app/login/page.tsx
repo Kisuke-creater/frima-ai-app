@@ -12,6 +12,25 @@ import {
 } from "@/lib/supabase-auth";
 
 const PKCE_VERIFIER_STORAGE_KEY = "google-oauth-pkce-verifier";
+const PKCE_VERIFIER_COOKIE_KEY = "google-oauth-pkce-verifier";
+
+function setPkceVerifierCookie(verifier: string): void {
+  document.cookie = `${PKCE_VERIFIER_COOKIE_KEY}=${encodeURIComponent(
+    verifier
+  )}; path=/; max-age=600; SameSite=Lax`;
+}
+
+function getPkceVerifierCookie(): string | null {
+  const raw = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${PKCE_VERIFIER_COOKIE_KEY}=`))
+    ?.split("=")[1];
+  return raw ? decodeURIComponent(raw) : null;
+}
+
+function clearPkceVerifierCookie(): void {
+  document.cookie = `${PKCE_VERIFIER_COOKIE_KEY}=; path=/; max-age=0; SameSite=Lax`;
+}
 
 function getOAuthParams(): URLSearchParams {
   const hash = window.location.hash.startsWith("#")
@@ -33,6 +52,20 @@ function decodeOAuthError(raw: string): string {
   } catch {
     return raw;
   }
+}
+
+function mapAuthErrorMessage(raw: string): string {
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("email not confirmed")) {
+    return "メール認証が完了していません。認証メールのリンクを開いてからログインしてください。";
+  }
+  if (normalized.includes("invalid login credentials")) {
+    return "メールアドレスまたはパスワードが正しくありません。";
+  }
+  if (normalized.includes("both auth code and code verifier should be non-empty")) {
+    return "Googleログイン情報の復元に失敗しました。もう一度Googleログインをお試しください。";
+  }
+  return raw;
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -79,7 +112,9 @@ export default function LoginPage() {
     if (!accessToken && !authCode && !oauthError) return;
 
     if (oauthError) {
-      setError(decodeOAuthError(oauthError) || "Googleログインに失敗しました。");
+      setError(
+        mapAuthErrorMessage(decodeOAuthError(oauthError) || "Googleログインに失敗しました。")
+      );
       window.history.replaceState({}, document.title, window.location.pathname);
       setGoogleLoading(false);
       return;
@@ -109,16 +144,20 @@ export default function LoginPage() {
         }
 
         if (!authCode) return;
-        const codeVerifier = localStorage.getItem(PKCE_VERIFIER_STORAGE_KEY) ?? undefined;
+        const codeVerifier =
+          localStorage.getItem(PKCE_VERIFIER_STORAGE_KEY) ??
+          getPkceVerifierCookie() ??
+          undefined;
         const session = await exchangeCodeForSession(authCode, codeVerifier);
         localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
+        clearPkceVerifierCookie();
         await completeLogin(session.accessToken, session.expiresIn);
       } catch (e: unknown) {
-        setError(
+        const message =
           e instanceof Error
             ? e.message
-            : "Googleログイン処理に失敗しました。もう一度お試しください。"
-        );
+            : "Googleログイン処理に失敗しました。もう一度お試しください。";
+        setError(mapAuthErrorMessage(message));
       } finally {
         setLoading(false);
         setGoogleLoading(false);
@@ -142,7 +181,8 @@ export default function LoginPage() {
       }
       router.push("/dashboard");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "ログインに失敗しました。");
+      const message = e instanceof Error ? e.message : "ログインに失敗しました。";
+      setError(mapAuthErrorMessage(message));
     } finally {
       setLoading(false);
     }
@@ -161,6 +201,7 @@ export default function LoginPage() {
 
       const { verifier, challenge } = await createPkcePair();
       localStorage.setItem(PKCE_VERIFIER_STORAGE_KEY, verifier);
+      setPkceVerifierCookie(verifier);
       window.location.href = buildGoogleOAuthUrl(redirectTo, {
         flowType: "pkce",
         codeChallenge: challenge,
