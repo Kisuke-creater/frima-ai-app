@@ -106,16 +106,27 @@ export async function signInWithEmailPassword(
 
 export async function signUpWithEmailPassword(
   email: string,
-  password: string
+  password: string,
+  emailRedirectTo?: string
 ): Promise<{ accessToken: string | null; expiresIn: number | null; user: AuthUser | null }> {
   const { url, anonKey } = getAuthConfig();
+  const payload: Record<string, unknown> = { email, password };
+  if (emailRedirectTo) {
+    payload.email_redirect_to = emailRedirectTo;
+  }
+
+  const headers: Record<string, string> = {
+    apikey: anonKey,
+    "Content-Type": "application/json",
+  };
+  if (emailRedirectTo) {
+    headers.redirect_to = emailRedirectTo;
+  }
+
   const response = await fetch(`${url}/auth/v1/signup`, {
     method: "POST",
-    headers: {
-      apikey: anonKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email, password }),
+    headers,
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {

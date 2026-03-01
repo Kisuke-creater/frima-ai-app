@@ -28,7 +28,8 @@ In Supabase Dashboard:
 
 1. Go to `Authentication > Providers`
 2. Enable `Email` (and `Google` if needed)
-3. Set redirect URL to your app login callback URL (for local: `http://localhost:3000/login`)
+3. Go to `Authentication > Sign In / Providers > Email` and enable email confirmation (confirm email)
+4. Set redirect URL to your app login callback URL (for local: `http://localhost:3000/login`)
 
 ## 4. API
 

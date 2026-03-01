@@ -3,20 +3,21 @@
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 function NavLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const publicPaths = useMemo(() => new Set(["/login", "/signup"]), []);
 
   useEffect(() => {
-    if (!loading && !user && pathname !== "/login") {
+    if (!loading && !user && !publicPaths.has(pathname)) {
       router.push("/login");
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, pathname, router, publicPaths]);
 
-  if (pathname === "/login") {
+  if (publicPaths.has(pathname)) {
     return <>{children}</>;
   }
 
@@ -100,4 +101,3 @@ export default function ClientLayout({
     </AuthProvider>
   );
 }
-
