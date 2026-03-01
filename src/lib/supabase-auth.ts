@@ -53,11 +53,13 @@ export function buildGoogleOAuthUrl(
   const { url, anonKey } = getAuthConfig();
   const configuredRedirectTo = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO;
   const resolvedRedirectTo = configuredRedirectTo?.trim() || redirectTo;
+
   const params = new URLSearchParams({
     provider: "google",
     redirect_to: resolvedRedirectTo,
     flow_type: options.flowType ?? "implicit",
   });
+
   if (options.codeChallenge) {
     params.set("code_challenge", options.codeChallenge);
     params.set("code_challenge_method", options.codeChallengeMethod ?? "s256");
@@ -124,9 +126,7 @@ export async function exchangeCodeForSession(
   codeVerifier?: string
 ): Promise<{ accessToken: string; expiresIn: number; user: AuthUser }> {
   const { url, anonKey } = getAuthConfig();
-  const payload: Record<string, string> = {
-    auth_code: authCode,
-  };
+  const payload: Record<string, string> = { auth_code: authCode };
   if (codeVerifier) {
     payload.code_verifier = codeVerifier;
   }
