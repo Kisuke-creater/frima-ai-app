@@ -29,6 +29,12 @@ interface AuthConfig {
   anonKey: string;
 }
 
+interface GoogleOAuthOptions {
+  flowType?: "implicit" | "pkce";
+  codeChallenge?: string;
+  codeChallengeMethod?: "s256" | "plain";
+}
+
 function getAuthConfig(): AuthConfig {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -40,15 +46,22 @@ function getAuthConfig(): AuthConfig {
   return { url, anonKey };
 }
 
-export function buildGoogleOAuthUrl(redirectTo: string): string {
+export function buildGoogleOAuthUrl(
+  redirectTo: string,
+  options: GoogleOAuthOptions = {}
+): string {
   const { url, anonKey } = getAuthConfig();
   const configuredRedirectTo = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO;
   const resolvedRedirectTo = configuredRedirectTo?.trim() || redirectTo;
   const params = new URLSearchParams({
     provider: "google",
     redirect_to: resolvedRedirectTo,
-    flow_type: "implicit",
+    flow_type: options.flowType ?? "implicit",
   });
+  if (options.codeChallenge) {
+    params.set("code_challenge", options.codeChallenge);
+    params.set("code_challenge_method", options.codeChallengeMethod ?? "s256");
+  }
 
   return `${url}/auth/v1/authorize?${params.toString()}&apikey=${encodeURIComponent(
     anonKey
@@ -97,6 +110,43 @@ export async function signInWithEmailPassword(
   const data = (await response.json()) as AuthSessionResponse;
   if (!data.access_token || !data.expires_in || !data.user?.id) {
     throw new Error("Sign-in response is missing required fields.");
+  }
+
+  return {
+    accessToken: data.access_token,
+    expiresIn: data.expires_in,
+    user: mapAuthUser(data.user),
+  };
+}
+
+export async function exchangeCodeForSession(
+  authCode: string,
+  codeVerifier?: string
+): Promise<{ accessToken: string; expiresIn: number; user: AuthUser }> {
+  const { url, anonKey } = getAuthConfig();
+  const payload: Record<string, string> = {
+    auth_code: authCode,
+  };
+  if (codeVerifier) {
+    payload.code_verifier = codeVerifier;
+  }
+
+  const response = await fetch(`${url}/auth/v1/token?grant_type=pkce`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as AuthSessionResponse;
+  if (!data.access_token || !data.expires_in || !data.user?.id) {
+    throw new Error("Code exchange response is missing required fields.");
   }
 
   return {
