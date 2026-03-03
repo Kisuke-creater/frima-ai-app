@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { CheckCheck, LoaderCircle, PlusCircle, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   deleteItems,
@@ -10,12 +11,31 @@ import {
   markAsSold,
   type Item,
 } from "@/lib/firestore";
+import Button, { buttonClassName } from "@/components/ui/Button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import Input from "@/components/ui/Input";
+import { cn } from "@/lib/cn";
 
 type Tab = "listed" | "sold";
 
 function formatYen(value: number): string {
   return `¥${value.toLocaleString("ja-JP")}`;
 }
+
+const conditionLabel: Record<string, string> = {
+  new: "新品・未使用",
+  like_new: "未使用に近い",
+  good: "目立った傷や汚れなし",
+  fair: "やや傷や汚れあり",
+  poor: "全体的に状態が悪い",
+};
 
 export default function ItemsPage() {
   const { user } = useAuth();
@@ -26,25 +46,20 @@ export default function ItemsPage() {
   const [soldLoading, setSoldLoading] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [error, setError] = useState("");
-
   const [sellDialogItem, setSellDialogItem] = useState<Item | null>(null);
   const [sellPriceInput, setSellPriceInput] = useState("");
   const [sellDialogError, setSellDialogError] = useState("");
-
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   const fetchItems = async () => {
     if (!user) return;
-
     try {
       setError("");
       const data = await getItems(user.uid);
       setItems(data);
-      setSelectedItemIds((prev) =>
-        prev.filter((id) => data.some((item) => item.id === id)),
-      );
-    } catch (e: unknown) {
-      setError(getFirestoreClientErrorMessage(e));
+      setSelectedItemIds((prev) => prev.filter((id) => data.some((item) => item.id === id)));
+    } catch (cause: unknown) {
+      setError(getFirestoreClientErrorMessage(cause));
     }
   };
 
@@ -54,19 +69,10 @@ export default function ItemsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const listedCount = useMemo(
-    () => items.filter((item) => item.status === "listed").length,
-    [items],
-  );
-  const soldCount = useMemo(
-    () => items.filter((item) => item.status === "sold").length,
-    [items],
-  );
+  const listedCount = useMemo(() => items.filter((item) => item.status === "listed").length, [items]);
+  const soldCount = useMemo(() => items.filter((item) => item.status === "sold").length, [items]);
 
-  const filtered = useMemo(
-    () => items.filter((item) => item.status === tab),
-    [items, tab],
-  );
+  const filtered = useMemo(() => items.filter((item) => item.status === tab), [items, tab]);
   const filteredIds = useMemo(
     () => filtered.flatMap((item) => (item.id ? [item.id] : [])),
     [filtered],
@@ -102,7 +108,7 @@ export default function ItemsPage() {
 
     const soldPrice = Number(sellPriceInput.replace(/[^\d.-]/g, ""));
     if (!Number.isFinite(soldPrice) || soldPrice < 0) {
-      setSellDialogError("実売額は0以上の数値で入力してください。");
+      setSellDialogError("販売価格は0以上の数値で入力してください。");
       return;
     }
 
@@ -114,8 +120,8 @@ export default function ItemsPage() {
       setSellDialogItem(null);
       setSellPriceInput("");
       await fetchItems();
-    } catch (e: unknown) {
-      setError(getFirestoreClientErrorMessage(e));
+    } catch (cause: unknown) {
+      setError(getFirestoreClientErrorMessage(cause));
     } finally {
       setSoldLoading(null);
     }
@@ -123,9 +129,7 @@ export default function ItemsPage() {
 
   const toggleItemSelection = (itemId: string) => {
     setSelectedItemIds((prev) =>
-      prev.includes(itemId)
-        ? prev.filter((id) => id !== itemId)
-        : [...prev, itemId],
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId],
     );
   };
 
@@ -151,329 +155,265 @@ export default function ItemsPage() {
     try {
       setError("");
       await deleteItems(user.uid, selectedFilteredIds);
-      setSelectedItemIds((prev) =>
-        prev.filter((id) => !selectedFilteredIds.includes(id)),
-      );
+      setSelectedItemIds((prev) => prev.filter((id) => !selectedFilteredIds.includes(id)));
       await fetchItems();
-    } catch (e: unknown) {
-      setError(getFirestoreClientErrorMessage(e));
+    } catch (cause: unknown) {
+      setError(getFirestoreClientErrorMessage(cause));
     } finally {
       setDeleteLoading(false);
     }
-  };
-
-  const conditionLabel: Record<string, string> = {
-    new: "新品・未使用",
-    like_new: "未使用に近い",
-    good: "目立った傷や汚れなし",
-    fair: "やや傷や汚れあり",
-    poor: "全体的に状態が悪い",
   };
 
   const formatItemPrice = (item: Item) =>
     formatYen((item.status === "sold" ? item.soldPrice : item.price) ?? item.price ?? 0);
 
   return (
-    <div className="fade-in">
-      <div
-        className="page-header"
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
+    <div className="space-y-5">
+      <section className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1>商品一覧</h1>
-          <p>出品中・売却済みの商品をまとめて管理できます。</p>
+          <h2 className="text-2xl font-bold text-slate-900">Items</h2>
+          <p className="mt-1 text-sm text-slate-500">出品中 / 販売済みの商品を一覧管理します。</p>
         </div>
-        <Link href="/generate" className="btn btn-primary">
-          AI生成で追加
+        <Link href="/generate" className={buttonClassName({ variant: "primary" })}>
+          <PlusCircle className="size-4" />
+          商品登録へ
         </Link>
-      </div>
+      </section>
 
-      {error && <p className="error-msg">{error}</p>}
-
-      <div className="tab-bar">
-        <button
-          className={`tab-btn ${tab === "listed" ? "active" : ""}`}
-          onClick={() => setTab("listed")}
-        >
-          出品中 ({listedCount})
-        </button>
-        <button
-          className={`tab-btn ${tab === "sold" ? "active" : ""}`}
-          onClick={() => setTab("sold")}
-        >
-          売却済み ({soldCount})
-        </button>
-      </div>
-
-      {!loading && filtered.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            margin: "12px 0 16px",
-            padding: "12px 14px",
-            borderRadius: 12,
-            border: "1px solid var(--border)",
-            background: "var(--bg-card)",
-          }}
-        >
-          <label
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 13,
-              color: "var(--text-secondary)",
-              cursor: deleteLoading ? "not-allowed" : "pointer",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={allFilteredSelected}
-              onChange={toggleSelectAllFiltered}
-              disabled={deleteLoading}
-              style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
-            />
-            このタブを全選択
-          </label>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              選択中: {selectedFilteredIds.length}件
-            </span>
-            <button
-              type="button"
-              className="btn btn-danger btn-sm"
-              onClick={() => void deleteSelectedInTab()}
-              disabled={deleteLoading || selectedFilteredIds.length === 0}
-            >
-              {deleteLoading
-                ? "削除中..."
-                : `選択を削除 (${selectedFilteredIds.length})`}
-            </button>
-          </div>
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
         </div>
       )}
 
+      <section className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+          <button
+            type="button"
+            className={cn(
+              "rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+              tab === "listed"
+                ? "bg-brand-600 text-white"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
+            )}
+            onClick={() => setTab("listed")}
+          >
+            出品中 ({listedCount})
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+              tab === "sold"
+                ? "bg-brand-600 text-white"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
+            )}
+            onClick={() => setTab("sold")}
+          >
+            販売済み ({soldCount})
+          </button>
+        </div>
+      </section>
+
+      {!loading && filtered.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={allFilteredSelected}
+                onChange={toggleSelectAllFiltered}
+                disabled={deleteLoading}
+                className="size-4 accent-blue-600"
+              />
+              このタブを全選択
+            </label>
+
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-slate-500">選択中: {selectedFilteredIds.length}件</p>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => void deleteSelectedInTab()}
+                disabled={deleteLoading || selectedFilteredIds.length === 0}
+              >
+                <Trash2 className="size-4" />
+                {deleteLoading ? "削除中..." : "選択削除"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {loading ? (
-        <div className="items-grid">
-          {[1, 2, 3].map((i) => (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3].map((value) => (
             <div
-              key={i}
-              className="shimmer"
-              style={{ height: 200, borderRadius: 18 }}
+              key={value}
+              className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-slate-100"
             />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">{tab === "listed" ? "📦" : "✅"}</div>
-          <p>
-            {tab === "listed"
-              ? "出品中の商品はまだありません"
-              : "売却済みの商品はまだありません"}
-          </p>
-          {tab === "listed" && (
-            <Link href="/generate" className="btn btn-primary" style={{ marginTop: 16 }}>
-              AI生成で出品する
-            </Link>
-          )}
-        </div>
-      ) : (
-        <div className="items-grid">
-          {filtered.map((item) => (
-            <div key={item.id} className="item-card">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 8,
-                }}
+        <Card>
+          <CardContent className="py-14 text-center">
+            <p className="text-sm text-slate-500">
+              {tab === "listed" ? "出品中の商品がありません。" : "販売済みの商品がありません。"}
+            </p>
+            {tab === "listed" && (
+              <Link
+                href="/generate"
+                className={buttonClassName({
+                  variant: "primary",
+                  className: "mt-4",
+                })}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {item.id && (
-                    <label
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        cursor: deleteLoading ? "not-allowed" : "pointer",
-                      }}
-                      aria-label={`${item.title} を選択`}
-                    >
+                商品登録をはじめる
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((item) => (
+            <Card key={item.id} className="overflow-hidden">
+              <CardHeader className="space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {item.id && (
                       <input
                         type="checkbox"
                         checked={selectedIdSet.has(item.id)}
                         onChange={() => toggleItemSelection(item.id!)}
                         disabled={deleteLoading}
-                        style={{
-                          width: 16,
-                          height: 16,
-                          accentColor: "var(--accent)",
-                        }}
+                        className="size-4 accent-blue-600"
+                        aria-label={`${item.title} を選択`}
                       />
-                    </label>
-                  )}
-                  <span className={`item-badge ${item.status}`}>
-                    {item.status === "listed" ? "出品中" : "売却済み"}
-                  </span>
+                    )}
+                    <Badge variant={item.status === "sold" ? "sold" : "listed"}>
+                      {item.status === "sold" ? "販売済み" : "出品中"}
+                    </Badge>
+                  </div>
+                  <Badge>{item.category}</Badge>
                 </div>
-                <span className="item-category">{item.category}</span>
-              </div>
 
-              <div className="item-title">{item.title}</div>
+                <div>
+                  <CardTitle className="line-clamp-1">{item.title}</CardTitle>
+                  <CardDescription className="line-clamp-2">{item.description}</CardDescription>
+                </div>
+              </CardHeader>
 
-              <p
-                style={{
-                  fontSize: 13,
-                  color: "var(--text-secondary)",
-                  lineHeight: 1.6,
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {item.description}
-              </p>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-slate-500">
                   状態: {conditionLabel[item.condition] ?? item.condition}
-                </span>
-                <div className="item-price">{formatItemPrice(item)}</div>
-              </div>
+                </p>
+                <p className="text-2xl font-bold text-slate-900">{formatItemPrice(item)}</p>
+                {item.createdAt && (
+                  <p className="text-xs text-slate-500">
+                    登録日: {item.createdAt.toDate().toLocaleDateString("ja-JP")}
+                    {item.soldAt && ` / 販売日: ${item.soldAt.toDate().toLocaleDateString("ja-JP")}`}
+                  </p>
+                )}
 
-              {item.createdAt && (
-                <div className="item-meta">
-                  登録日: {item.createdAt.toDate().toLocaleDateString("ja-JP")}
-                  {item.soldAt && (
-                    <>
-                      {" "}
-                      | 売却日: {item.soldAt.toDate().toLocaleDateString("ja-JP")}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {item.status === "listed" && (
-                <button
-                  className="btn btn-success"
-                  onClick={() => openSoldDialog(item)}
-                  disabled={soldLoading === item.id || deleteLoading}
-                  style={{ width: "100%" }}
-                >
-                  {soldLoading === item.id ? (
-                    <>
-                      <span className="spinner" />
-                      更新中...
-                    </>
-                  ) : (
-                    "売却済みにする"
-                  )}
-                </button>
-              )}
-            </div>
+                {item.status === "listed" && (
+                  <Button
+                    variant="success"
+                    fullWidth
+                    onClick={() => openSoldDialog(item)}
+                    disabled={soldLoading === item.id || deleteLoading}
+                  >
+                    {soldLoading === item.id ? (
+                      <>
+                        <LoaderCircle className="size-4 animate-spin" />
+                        更新中...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCheck className="size-4" />
+                        販売済みにする
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
       {sellDialogItem && (
         <div
-          className="sell-dialog-backdrop"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="sell-dialog-title"
           onClick={closeSoldDialog}
         >
-          <div className="sell-dialog-card" onClick={(e) => e.stopPropagation()}>
-            <div className="sell-dialog-header">
-              <p className="sell-dialog-kicker">実売額入力</p>
-              <h2 id="sell-dialog-title">実売額を入力</h2>
-              <p className="sell-dialog-item-title">{sellDialogItem.title}</p>
-            </div>
-
-            <div className="sell-dialog-field">
-              <label htmlFor="sold-price-input" className="sell-dialog-label">
-                実売額（円）
-              </label>
-              <div className="sell-dialog-input-shell">
-                <span className="sell-dialog-yen" aria-hidden="true">
-                  ¥
-                </span>
-                <input
+          <Card className="w-full max-w-md" onClick={(event) => event.stopPropagation()}>
+            <CardHeader>
+              <CardTitle id="sell-dialog-title">販売価格を入力</CardTitle>
+              <CardDescription>{sellDialogItem.title}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label htmlFor="sold-price-input" className="mb-1.5 block text-sm font-medium text-slate-600">
+                  販売価格（円）
+                </label>
+                <Input
                   id="sold-price-input"
-                  className="sell-dialog-input"
                   type="text"
                   inputMode="numeric"
                   autoFocus
                   value={sellPriceInput}
-                  onChange={(e) => {
-                    setSellPriceInput(e.target.value);
+                  onChange={(event) => {
+                    setSellPriceInput(event.target.value);
                     if (sellDialogError) setSellDialogError("");
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
                       void submitSoldDialog();
                     }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
+                    if (event.key === "Escape") {
+                      event.preventDefault();
                       closeSoldDialog();
                     }
                   }}
                   placeholder="例: 12800"
                 />
               </div>
-              <p className="sell-dialog-help">
-                入力した実売額が売上集計とグラフに反映されます。
-              </p>
-            </div>
 
-            {sellDialogError && <p className="error-msg">{sellDialogError}</p>}
+              {sellDialogError && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {sellDialogError}
+                </div>
+              )}
 
-            <div className="sell-dialog-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={closeSoldDialog}
-                disabled={soldLoading === sellDialogItem.id}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className="btn btn-success"
-                onClick={() => void submitSoldDialog()}
-                disabled={soldLoading === sellDialogItem.id}
-              >
-                {soldLoading === sellDialogItem.id ? (
-                  <>
-                    <span className="spinner" />
-                    保存中...
-                  </>
-                ) : (
-                  "売却済みにする"
-                )}
-              </button>
-            </div>
-          </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="secondary"
+                  onClick={closeSoldDialog}
+                  disabled={soldLoading === sellDialogItem.id}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  variant="success"
+                  onClick={() => void submitSoldDialog()}
+                  disabled={soldLoading === sellDialogItem.id}
+                >
+                  {soldLoading === sellDialogItem.id ? (
+                    <>
+                      <LoaderCircle className="size-4 animate-spin" />
+                      保存中...
+                    </>
+                  ) : (
+                    "販売済みにする"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

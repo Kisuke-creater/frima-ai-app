@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Calculator, LoaderCircle, Wallet } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   getFirestoreClientErrorMessage,
@@ -18,6 +19,16 @@ import {
   PACKAGING_MATERIAL_MAP,
 } from "@/lib/simulation/packaging-materials";
 import type { Marketplace, SimulationResult } from "@/lib/simulation/types";
+import Button from "@/components/ui/Button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
+import Input, { fieldClassName } from "@/components/ui/Input";
+import { cn } from "@/lib/cn";
 
 type MarketplaceOption = Marketplace | "";
 
@@ -42,12 +53,10 @@ export default function SimulatorPage() {
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [result, setResult] = useState<SimulationResult | null>(null);
-
   const [selectedItemId, setSelectedItemId] = useState("");
   const [sellingPriceInput, setSellingPriceInput] = useState("");
   const [compareAllPlatforms, setCompareAllPlatforms] = useState(true);
-  const [marketplaceInput, setMarketplaceInput] =
-    useState<MarketplaceOption>("");
+  const [marketplaceInput, setMarketplaceInput] = useState<MarketplaceOption>("");
   const [lengthCmInput, setLengthCmInput] = useState("");
   const [widthCmInput, setWidthCmInput] = useState("");
   const [heightCmInput, setHeightCmInput] = useState("");
@@ -56,10 +65,7 @@ export default function SimulatorPage() {
 
   const lastInitializedItemId = useRef<string | null>(null);
 
-  const listedItems = useMemo(
-    () => items.filter((item) => item.status === "listed"),
-    [items],
-  );
+  const listedItems = useMemo(() => items.filter((item) => item.status === "listed"), [items]);
 
   const selectedItem = useMemo(
     () => listedItems.find((item) => item.id === selectedItemId),
@@ -75,8 +81,8 @@ export default function SimulatorPage() {
         setItems(data);
         setError("");
       })
-      .catch((e: unknown) => {
-        setError(getFirestoreClientErrorMessage(e));
+      .catch((cause: unknown) => {
+        setError(getFirestoreClientErrorMessage(cause));
       })
       .finally(() => setLoading(false));
   }, [user]);
@@ -112,9 +118,7 @@ export default function SimulatorPage() {
     lastInitializedItemId.current = selectedItem.id ?? null;
   }, [selectedItem]);
 
-  const effectiveMarketplace = (marketplaceInput ||
-    selectedItem?.marketplace ||
-    "") as MarketplaceOption;
+  const effectiveMarketplace = (marketplaceInput || selectedItem?.marketplace || "") as MarketplaceOption;
   const selectedPackagingMaterial =
     PACKAGING_MATERIAL_MAP[packagingMaterialId] ?? PACKAGING_MATERIAL_MAP.none;
 
@@ -190,9 +194,7 @@ export default function SimulatorPage() {
       setResult(nextResult);
 
       if (nextResult.candidates.length === 0) {
-        setError(
-          "条件に合う配送方法が見つかりませんでした。サイズ・重量を見直してください。",
-        );
+        setError("条件に合う配送方法が見つかりませんでした。サイズ・重量を見直してください。");
       }
 
       try {
@@ -221,51 +223,46 @@ export default function SimulatorPage() {
           )}`,
         );
       }
-    } catch (e: unknown) {
-      setError(getFirestoreClientErrorMessage(e));
+    } catch (cause: unknown) {
+      setError(getFirestoreClientErrorMessage(cause));
     } finally {
       setRunning(false);
     }
   };
 
   return (
-    <div className="fade-in">
-      <div className="page-header">
-        <h1>利益シミュレーション</h1>
-        <p>
-          出品中の商品を選択し、プラットフォーム手数料・送料・配送資材費を含めた
-          想定利益を比較できます。
-        </p>
-      </div>
+    <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+      <section className="space-y-5">
+        {error && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </div>
+        )}
+        {warning && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            {warning}
+          </div>
+        )}
 
-      {error && <p className="error-msg">{error}</p>}
-      {warning && (
-        <p
-          style={{
-            color: "var(--warning)",
-            fontSize: 13,
-            marginTop: error ? 8 : 0,
-          }}
-        >
-          {warning}
-        </p>
-      )}
-
-      <div className="simulator-layout">
-        <div className="result-section">
-          <div className="card">
-            <div className="card-title">対象商品</div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="size-4 text-brand-600" />
+              Profit Simulation
+            </CardTitle>
+            <CardDescription>出品中の商品を選び、利益条件を入力します。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-600">対象商品</label>
               <select
-                className="form-control"
+                className={cn(fieldClassName, "pr-10")}
                 value={selectedItemId}
-                onChange={(e) => setSelectedItemId(e.target.value)}
+                onChange={(event) => setSelectedItemId(event.target.value)}
                 disabled={loading}
               >
                 <option value="">
-                  {loading
-                    ? "商品を読み込み中..."
-                    : "出品中の商品を選択してください"}
+                  {loading ? "商品を読み込み中..." : "出品中の商品を選択してください"}
                 </option>
                 {listedItems.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -274,49 +271,47 @@ export default function SimulatorPage() {
                 ))}
               </select>
             </div>
-          </div>
 
-          <div className="card">
-            <div className="card-title">試算条件</div>
-            <div className="sim-field-grid">
-              <div className="form-group">
-                <label className="form-label">販売価格（円）</label>
-                <input
-                  className="form-control"
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">
+                  販売価格（円）
+                </label>
+                <Input
                   type="number"
                   min={1}
                   value={sellingPriceInput}
-                  onChange={(e) => setSellingPriceInput(e.target.value)}
+                  onChange={(event) => setSellingPriceInput(event.target.value)}
                   placeholder="例: 12800"
                   disabled={!selectedItem}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">比較モード</label>
-                <label className="sim-checkbox">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">
+                  比較モード
+                </label>
+                <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm text-slate-600">
                   <input
                     type="checkbox"
                     checked={compareAllPlatforms}
-                    onChange={(e) => setCompareAllPlatforms(e.target.checked)}
+                    onChange={(event) => setCompareAllPlatforms(event.target.checked)}
                     disabled={!selectedItem}
+                    className="size-4 accent-blue-600"
                   />
-                  全プラットフォームを比較する
+                  全プラットフォーム比較
                 </label>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">
-                  商品のプラットフォーム
-                  {!selectedItem?.marketplace && (
-                    <span className="sim-required">未設定</span>
-                  )}
+              <div className="sm:col-span-2">
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">
+                  比較対象プラットフォーム
                 </label>
                 <select
-                  className="form-control"
+                  className={cn(fieldClassName, "pr-10")}
                   value={effectiveMarketplace}
-                  onChange={(e) =>
-                    setMarketplaceInput(e.target.value as MarketplaceOption)
+                  onChange={(event) =>
+                    setMarketplaceInput(event.target.value as MarketplaceOption)
                   }
                   disabled={!selectedItem}
                 >
@@ -327,80 +322,77 @@ export default function SimulatorPage() {
                     </option>
                   ))}
                 </select>
+                {!compareAllPlatforms && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    現在は
+                    {effectiveMarketplace
+                      ? `「${getMarketplaceLabel(effectiveMarketplace)}」`
+                      : "プラットフォーム未選択"}
+                    のみ比較します。
+                  </p>
+                )}
               </div>
 
-              {!compareAllPlatforms && (
-                <div className="sim-note-row">
-                  現在は
-                  {effectiveMarketplace
-                    ? `「${getMarketplaceLabel(effectiveMarketplace)}」`
-                    : "プラットフォーム未選択"}
-                  のみ比較します。
-                </div>
-              )}
-
-              <div className="form-group">
-                <label className="form-label">縦（cm）</label>
-                <input
-                  className="form-control"
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">縦（cm）</label>
+                <Input
                   type="number"
                   min={0}
                   step="0.1"
                   value={lengthCmInput}
-                  onChange={(e) => setLengthCmInput(e.target.value)}
+                  onChange={(event) => setLengthCmInput(event.target.value)}
                   placeholder="例: 20"
                   disabled={!selectedItem}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">横（cm）</label>
-                <input
-                  className="form-control"
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">横（cm）</label>
+                <Input
                   type="number"
                   min={0}
                   step="0.1"
                   value={widthCmInput}
-                  onChange={(e) => setWidthCmInput(e.target.value)}
+                  onChange={(event) => setWidthCmInput(event.target.value)}
                   placeholder="例: 15"
                   disabled={!selectedItem}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">厚さ（cm）</label>
-                <input
-                  className="form-control"
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">厚さ（cm）</label>
+                <Input
                   type="number"
                   min={0}
                   step="0.1"
                   value={heightCmInput}
-                  onChange={(e) => setHeightCmInput(e.target.value)}
+                  onChange={(event) => setHeightCmInput(event.target.value)}
                   placeholder="例: 2.5"
                   disabled={!selectedItem}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">重量（kg）</label>
-                <input
-                  className="form-control"
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">
+                  重量（kg）
+                </label>
+                <Input
                   type="number"
                   min={0}
                   step="0.001"
                   value={weightKgInput}
-                  onChange={(e) => setWeightKgInput(e.target.value)}
+                  onChange={(event) => setWeightKgInput(event.target.value)}
                   placeholder="例: 0.38"
                   disabled={!selectedItem}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">配送資材</label>
+              <div className="sm:col-span-2">
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">配送資材</label>
                 <select
-                  className="form-control"
+                  className={cn(fieldClassName, "pr-10")}
                   value={packagingMaterialId}
-                  onChange={(e) => setPackagingMaterialId(e.target.value)}
+                  onChange={(event) => setPackagingMaterialId(event.target.value)}
                   disabled={!selectedItem}
                 >
                   {PACKAGING_MATERIALS.map((material) => (
@@ -410,129 +402,158 @@ export default function SimulatorPage() {
                   ))}
                 </select>
               </div>
-
-              <div className="sim-cost-card">
-                <span>資材費</span>
-                <strong>{formatYen(selectedPackagingMaterial.cost)}</strong>
-              </div>
             </div>
 
-            <button
-              type="button"
-              className="btn btn-primary btn-lg"
-              style={{ width: "100%", marginTop: 8 }}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">資材費</p>
+              <p className="mt-1 text-xl font-bold text-slate-900">
+                {formatYen(selectedPackagingMaterial.cost)}
+              </p>
+            </div>
+
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={() => void handleRunSimulation()}
               disabled={!selectedItem || running}
             >
-              {running ? "シミュレーション中..." : "利益を試算する"}
-            </button>
-          </div>
-        </div>
+              {running ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" />
+                  シミュレーション中...
+                </>
+              ) : (
+                "利益を試算する"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
 
-        <div className="result-section">
-          {!result && (
-            <div className="card">
-              <div className="empty-state" style={{ padding: "28px 20px" }}>
-                <p>
-                  商品を選択してサイズ・重量・配送資材を入力すると、
-                  <br />
-                  利益比較の結果を表示します。
-                </p>
-              </div>
-            </div>
-          )}
+      <section className="space-y-5">
+        {!result && (
+          <Card>
+            <CardContent className="py-20 text-center">
+              <p className="text-sm text-slate-500">
+                商品とサイズ情報を入力すると、プラットフォーム別の利益比較が表示されます。
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-          {result?.recommended && (
-            <div className="card sim-recommend-card">
-              <div className="sim-recommend-header">
-                <span className="sim-kicker">おすすめ候補</span>
-                <div className="sim-profit-value">
-                  想定利益 {formatYen(result.recommended.profit)}
+        {result?.recommended && (
+          <Card className="border-brand-200 bg-gradient-to-br from-white to-brand-50/60">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-brand-700">
+                <Wallet className="size-5" />
+                おすすめ候補
+              </CardTitle>
+              <CardDescription>想定利益: {formatYen(result.recommended.profit)}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-xs text-slate-500">プラットフォーム</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {result.recommended.marketplaceLabel}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-xs text-slate-500">配送方法</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {result.recommended.shippingMethodLabel}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-xs text-slate-500">配送資材</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {result.recommended.packagingMaterialLabel}
+                  </p>
                 </div>
               </div>
 
-              <div className="sim-summary-grid">
-                <div>
-                  <span>プラットフォーム</span>
-                  <strong>{result.recommended.marketplaceLabel}</strong>
-                </div>
-                <div>
-                  <span>配送方法</span>
-                  <strong>{result.recommended.shippingMethodLabel}</strong>
-                </div>
-                <div>
-                  <span>配送資材</span>
-                  <strong>{result.recommended.packagingMaterialLabel}</strong>
-                </div>
-              </div>
-
-              <div className="sim-breakdown">
-                <span>手数料: {formatYen(result.recommended.platformFee)}</span>
-                <span>送料: {formatYen(result.recommended.shippingFee)}</span>
-                <span>資材費: {formatYen(result.recommended.packagingCost)}</span>
-                <span>合計コスト: {formatYen(result.recommended.totalCost)}</span>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                  手数料: {formatYen(result.recommended.platformFee)}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                  送料: {formatYen(result.recommended.shippingFee)}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                  資材費: {formatYen(result.recommended.packagingCost)}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                  合計コスト: {formatYen(result.recommended.totalCost)}
+                </span>
               </div>
 
               {result.recommended.note && (
-                <p className="sim-helper-note">備考: {result.recommended.note}</p>
+                <p className="text-xs text-slate-500">備考: {result.recommended.note}</p>
               )}
-            </div>
-          )}
+            </CardContent>
+          </Card>
+        )}
 
-          {result && (
-            <div className="card">
-              <div className="card-title">比較結果（利益順）</div>
-
+        {result && (
+          <Card>
+            <CardHeader>
+              <CardTitle>比較結果（利益順）</CardTitle>
+              <CardDescription>配送条件に合う候補を表示しています。</CardDescription>
+            </CardHeader>
+            <CardContent>
               {result.candidates.length === 0 ? (
-                <p className="sim-helper-note">
+                <p className="text-sm text-slate-500">
                   条件に一致する配送方法がありません。サイズ・重量を見直してください。
                 </p>
               ) : (
-                <div className="sim-table-wrap">
-                  <table className="sim-table">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[840px] border-collapse text-left text-sm">
                     <thead>
-                      <tr>
-                        <th>PF</th>
-                        <th>配送方法</th>
-                        <th>資材</th>
-                        <th>手数料</th>
-                        <th>送料</th>
-                        <th>資材費</th>
-                        <th>合計コスト</th>
-                        <th>想定利益</th>
-                        <th>備考</th>
+                      <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.08em] text-slate-500">
+                        <th className="px-2 py-2">PF</th>
+                        <th className="px-2 py-2">配送方法</th>
+                        <th className="px-2 py-2">資材</th>
+                        <th className="px-2 py-2">手数料</th>
+                        <th className="px-2 py-2">送料</th>
+                        <th className="px-2 py-2">資材費</th>
+                        <th className="px-2 py-2">合計コスト</th>
+                        <th className="px-2 py-2">想定利益</th>
+                        <th className="px-2 py-2">備考</th>
                       </tr>
                     </thead>
                     <tbody>
                       {result.candidates.map((candidate) => (
                         <tr
                           key={`${candidate.marketplace}-${candidate.shippingMethodId}`}
+                          className="border-b border-slate-100 text-slate-700"
                         >
-                          <td>{candidate.marketplaceLabel}</td>
-                          <td>{candidate.shippingMethodLabel}</td>
-                          <td>{candidate.packagingMaterialLabel}</td>
-                          <td>{formatYen(candidate.platformFee)}</td>
-                          <td>{formatYen(candidate.shippingFee)}</td>
-                          <td>{formatYen(candidate.packagingCost)}</td>
-                          <td>{formatYen(candidate.totalCost)}</td>
+                          <td className="px-2 py-2">{candidate.marketplaceLabel}</td>
+                          <td className="px-2 py-2">{candidate.shippingMethodLabel}</td>
+                          <td className="px-2 py-2">{candidate.packagingMaterialLabel}</td>
+                          <td className="px-2 py-2">{formatYen(candidate.platformFee)}</td>
+                          <td className="px-2 py-2">{formatYen(candidate.shippingFee)}</td>
+                          <td className="px-2 py-2">{formatYen(candidate.packagingCost)}</td>
+                          <td className="px-2 py-2">{formatYen(candidate.totalCost)}</td>
                           <td
-                            className={
-                              candidate.profit < 0 ? "sim-negative" : "sim-positive"
-                            }
+                            className={cn(
+                              "px-2 py-2 font-semibold",
+                              candidate.profit < 0 ? "text-rose-600" : "text-emerald-600",
+                            )}
                           >
                             {formatYen(candidate.profit)}
                           </td>
-                          <td>{candidate.note ?? "-"}</td>
+                          <td className="px-2 py-2">{candidate.note ?? "-"}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      </div>
+            </CardContent>
+          </Card>
+        )}
+      </section>
     </div>
   );
 }

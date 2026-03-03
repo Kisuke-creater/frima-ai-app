@@ -11,15 +11,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "フリマAI出品支援",
-  description: "AIがフリマ出品を自動サポート。タイトル・説明文・価格提案をワンクリックで生成。",
+  title: "Frima AI",
+  description: "AIでフリマ出品のタイトル・説明文・価格候補を作成し、利益試算まで支援するWebアプリ。",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja" suppressHydrationWarning>
       <body className={inter.className}>

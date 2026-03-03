@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
+import { Eye, EyeOff, LoaderCircle, WandSparkles } from "lucide-react";
 import { signUpWithEmailPassword } from "@/lib/firebase-auth";
+import Button, { buttonClassName } from "@/components/ui/Button";
+import { Card, CardContent } from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
 
 const LOWERCASE = "abcdefghjkmnpqrstuvwxyz";
 const UPPERCASE = "ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -19,9 +23,9 @@ function randomInt(max: number): number {
 }
 
 function shuffleChars(chars: string[]): string[] {
-  for (let i = chars.length - 1; i > 0; i -= 1) {
-    const j = randomInt(i + 1);
-    [chars[i], chars[j]] = [chars[j], chars[i]];
+  for (let index = chars.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(index + 1);
+    [chars[index], chars[swapIndex]] = [chars[swapIndex], chars[index]];
   }
   return chars;
 }
@@ -53,7 +57,7 @@ export default function SignupPage() {
   const trimmedEmail = email.trim();
   const canSubmit = useMemo(
     () => trimmedEmail.length > 0 && password.length >= 8,
-    [trimmedEmail.length, password.length]
+    [trimmedEmail.length, password.length],
   );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -71,10 +75,10 @@ export default function SignupPage() {
       setPassword("");
       setShowPassword(false);
       setNotice(
-        `認証メールを ${trimmedEmail} に送信しました。メール内リンクから認証後、ログインしてください。`
+        `確認メールを ${trimmedEmail} に送信しました。メール内リンクを開いた後にログインしてください。`,
       );
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "アカウント作成に失敗しました。");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "アカウント作成に失敗しました。");
     } finally {
       setLoading(false);
     }
@@ -88,96 +92,120 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <div className="login-logo">
-          <span className="logo-icon">AI</span>
-          <h1>FRIMA AI</h1>
-          <p>新規作成</p>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="email">
-              メールアドレス
-            </label>
-            <input
-              id="email"
-              className="form-control"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              placeholder="example@mail.com"
-              disabled={loading}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="password">
-              パスワード
-            </label>
-            <div className="password-field-row">
-              <input
-                id="password"
-                className="form-control"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                placeholder="8文字以上"
-                disabled={loading}
-                minLength={8}
-                required
-              />
-              <button
-                className="btn btn-secondary btn-sm password-toggle-btn"
-                type="button"
-                onClick={() => setShowPassword((current) => !current)}
-                disabled={loading}
-              >
-                {showPassword ? "非表示" : "表示"}
-              </button>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#dbeafe_0%,#f8fafc_35%,#f8fafc_100%)] p-4 sm:p-8">
+      <div className="mx-auto grid min-h-[calc(100vh-2rem)] max-w-xl items-center">
+        <Card>
+          <CardContent className="space-y-5 p-7 sm:p-8">
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-600">
+                Signup
+              </p>
+              <h1 className="mt-2 text-2xl font-bold text-slate-900">新規アカウント作成</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                出品管理を始めるためのアカウントを作成します。
+              </p>
             </div>
-            <div className="password-helper-actions">
-              <button
-                className="btn btn-secondary btn-sm"
-                type="button"
-                onClick={handleGeneratePassword}
-                disabled={loading}
-              >
-                パスワード生成
-              </button>
-              <span className="password-rule">8文字以上で入力してください</span>
-            </div>
-          </div>
 
-          {error && <p className="error-msg">{error}</p>}
-          {notice && <p className="notice-msg">{notice}</p>}
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-600" htmlFor="email">
+                  メールアドレス
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  placeholder="example@mail.com"
+                  disabled={loading}
+                  required
+                />
+              </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <button
-              className="btn btn-primary btn-lg"
-              disabled={loading || !canSubmit}
-              type="submit"
-              style={{ width: "100%" }}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner" />
-                  処理中...
-                </>
-              ) : (
-                "認証メールを送信"
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-600" htmlFor="password">
+                  パスワード
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="new-password"
+                    placeholder="8文字以上"
+                    minLength={8}
+                    disabled={loading}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    onClick={() => setShowPassword((current) => !current)}
+                    disabled={loading}
+                  >
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </Button>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="text-xs text-slate-500">8文字以上で設定してください。</p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleGeneratePassword}
+                    disabled={loading}
+                  >
+                    <WandSparkles className="size-4" />
+                    自動生成
+                  </Button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {error}
+                </div>
               )}
-            </button>
+              {notice && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  {notice}
+                </div>
+              )}
 
-            <Link href="/login" className="btn btn-secondary btn-lg" style={{ width: "100%" }}>
-              ログインページへ
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                disabled={loading || !canSubmit}
+                type="submit"
+              >
+                {loading ? (
+                  <>
+                    <LoaderCircle className="size-4 animate-spin" />
+                    作成中...
+                  </>
+                ) : (
+                  "確認メールを送信"
+                )}
+              </Button>
+            </form>
+
+            <Link
+              href="/login"
+              className={buttonClassName({
+                variant: "ghost",
+                size: "md",
+                fullWidth: true,
+              })}
+            >
+              ログインページへ戻る
             </Link>
-          </div>
-        </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -1,9 +1,30 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  BarChart3,
+  CircleDollarSign,
+  PackageCheck,
+  PackageOpen,
+  Percent,
+} from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getItems, getFirestoreClientErrorMessage, Item } from "@/lib/firestore";
-import Link from "next/link";
+import StatCard from "@/components/dashboard/StatCard";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import { buttonClassName } from "@/components/ui/Button";
+
+function formatYen(value: number): string {
+  return `¥${value.toLocaleString("ja-JP")}`;
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -18,154 +39,168 @@ export default function DashboardPage() {
         setItems(data);
         setError("");
       })
-      .catch((e: unknown) => {
-        setError(getFirestoreClientErrorMessage(e));
+      .catch((cause: unknown) => {
+        setError(getFirestoreClientErrorMessage(cause));
       })
       .finally(() => setLoading(false));
   }, [user]);
 
   const stats = useMemo(() => {
-    const listed = items.filter((i) => i.status === "listed");
-    const sold = items.filter((i) => i.status === "sold");
-    const totalSales = sold.reduce(
-      (sum, i) => sum + (i.soldPrice ?? i.price ?? 0),
-      0
-    );
-    return { listed: listed.length, sold: sold.length, totalSales };
+    const listed = items.filter((item) => item.status === "listed");
+    const sold = items.filter((item) => item.status === "sold");
+    const totalSales = sold.reduce((sum, item) => sum + (item.soldPrice ?? item.price ?? 0), 0);
+    const soldRate = items.length === 0 ? 0 : Math.round((sold.length / items.length) * 100);
+    return { listed: listed.length, sold: sold.length, totalSales, soldRate };
   }, [items]);
 
-  // 月別売上（直近6か月）
   const monthlyData = useMemo(() => {
     const months: Record<string, number> = {};
     const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getMonth() + 1}月`;
+    for (let index = 5; index >= 0; index -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
+      const key = `${date.getMonth() + 1}月`;
       months[key] = 0;
     }
+
     items
-      .filter((i) => i.status === "sold" && i.soldAt)
-      .forEach((i) => {
-        const d = i.soldAt!.toDate();
-        const key = `${d.getMonth() + 1}月`;
-        if (key in months) months[key] += i.soldPrice ?? i.price ?? 0;
+      .filter((item) => item.status === "sold" && item.soldAt)
+      .forEach((item) => {
+        if (!item.soldAt) return;
+        const date = item.soldAt.toDate();
+        const key = `${date.getMonth() + 1}月`;
+        if (key in months) {
+          months[key] += item.soldPrice ?? item.price ?? 0;
+        }
       });
+
     return Object.entries(months).map(([month, value]) => ({ month, value }));
   }, [items]);
 
-  const maxVal = Math.max(...monthlyData.map((d) => d.value), 1);
+  const maxMonthlyValue = Math.max(...monthlyData.map((entry) => entry.value), 1);
 
   return (
-    <div className="fade-in">
-      <div className="page-header">
-        <h1>ダッシュボード</h1>
-        <p>フリマ出品の概要を確認できます</p>
-      </div>
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
 
-      {error && <p className="error-msg">{error}</p>}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="出品中"
+          value={loading ? "..." : `${stats.listed}件`}
+          hint="現在販売中の商品"
+          icon={PackageOpen}
+        />
+        <StatCard
+          label="販売済み"
+          value={loading ? "..." : `${stats.sold}件`}
+          hint="成約済みの商品"
+          icon={PackageCheck}
+        />
+        <StatCard
+          label="売上合計"
+          value={loading ? "..." : formatYen(stats.totalSales)}
+          hint="販売済み商品の合計"
+          icon={CircleDollarSign}
+        />
+        <StatCard
+          label="販売率"
+          value={loading ? "..." : `${stats.soldRate}%`}
+          hint="累計商品の販売率"
+          icon={Percent}
+        />
+      </section>
 
-      {/* Stats */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon">📦</div>
-          <div className="stat-label">出品中</div>
-          <div className="stat-value">{loading ? "—" : stats.listed}<span style={{ fontSize: 16, color: "var(--text-secondary)" }}>件</span></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">✅</div>
-          <div className="stat-label">売却済み</div>
-          <div className="stat-value">{loading ? "—" : stats.sold}<span style={{ fontSize: 16, color: "var(--text-secondary)" }}>件</span></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">💴</div>
-          <div className="stat-label">累計売上</div>
-          <div className="stat-value accent">
-            {loading ? "—" : `¥${stats.totalSales.toLocaleString()}`}
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">📈</div>
-          <div className="stat-label">成約率</div>
-          <div className="stat-value accent">
-            {loading || items.length === 0
-              ? "—"
-              : `${Math.round((stats.sold / items.length) * 100)}%`}
-          </div>
-        </div>
-      </div>
-
-      {/* Monthly chart */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div className="card-title">月別売上（直近6か月）</div>
-        <div className="bar-chart">
-          {monthlyData.map(({ month, value }) => (
-            <div key={month} className="bar-item">
-              <div className="bar-value">
-                {value > 0 ? `¥${(value / 1000).toFixed(0)}k` : ""}
-              </div>
-              <div
-                className="bar"
-                style={{ height: `${Math.max((value / maxVal) * 90, value > 0 ? 8 : 2)}px` }}
-              />
-              <div className="bar-month">{month}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent items */}
-      <div className="card">
-        <div className="card-title">最近の出品</div>
-        {loading ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="shimmer" style={{ height: 60, borderRadius: 8 }} />
-            ))}
-          </div>
-        ) : items.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">📭</div>
-            <p>まだ出品がありません</p>
-            <Link href="/generate" className="btn btn-primary" style={{ marginTop: 16 }}>
-              AI生成で最初の出品を作る
-            </Link>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {items.slice(0, 5).map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "12px 16px",
-                  background: "var(--bg-secondary)",
-                  borderRadius: 10,
-                  gap: 12,
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.title}
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                    {item.category}
-                  </div>
-                </div>
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-light)" }}>
-                    ¥{((item.status === "sold" ? item.soldPrice : item.price) ?? item.price ?? 0).toLocaleString()}
-                  </div>
-                  <span className={`item-badge ${item.status}`}>
-                    {item.status === "listed" ? "出品中" : "売却済"}
+      <section className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="size-4 text-brand-600" />
+              直近6か月の売上推移
+            </CardTitle>
+            <CardDescription>月ごとの販売金額（販売済み商品のみ）</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex h-52 items-end justify-between gap-3">
+              {monthlyData.map((entry) => (
+                <div key={entry.month} className="flex flex-1 flex-col items-center gap-2">
+                  <span className="text-[10px] text-slate-400">
+                    {entry.value > 0 ? formatYen(entry.value) : "¥0"}
                   </span>
+                  <div className="flex h-36 w-full items-end rounded-lg bg-slate-50 px-1.5">
+                    <div
+                      className="w-full rounded-md bg-gradient-to-t from-brand-600 to-brand-300"
+                      style={{
+                        height: `${Math.max((entry.value / maxMonthlyValue) * 100, entry.value > 0 ? 9 : 3)}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-slate-500">{entry.month}</span>
                 </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>最新の商品</CardTitle>
+            <CardDescription>最近登録した5件を表示</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {loading && (
+              <div className="space-y-3">
+                {[1, 2, 3].map((value) => (
+                  <div
+                    key={value}
+                    className="h-16 animate-pulse rounded-xl border border-slate-200 bg-slate-100"
+                  />
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            )}
+
+            {!loading && items.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                <p className="text-sm text-slate-500">まだ商品が登録されていません。</p>
+                <Link
+                  href="/generate"
+                  className={buttonClassName({
+                    variant: "primary",
+                    className: "mt-4",
+                  })}
+                >
+                  最初の商品を登録する
+                </Link>
+              </div>
+            )}
+
+            {!loading &&
+              items.slice(0, 5).map((item) => (
+                <article
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
+                    <p className="mt-1 truncate text-xs text-slate-500">{item.category}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <p className="text-sm font-bold text-slate-900">
+                      {formatYen(
+                        (item.status === "sold" ? item.soldPrice : item.price) ?? item.price ?? 0,
+                      )}
+                    </p>
+                    <Badge variant={item.status === "sold" ? "sold" : "listed"}>
+                      {item.status === "sold" ? "販売済み" : "出品中"}
+                    </Badge>
+                  </div>
+                </article>
+              ))}
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

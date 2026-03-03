@@ -2,111 +2,103 @@
 
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import Button from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+
+type ThemeOption = "light" | "dark" | "system";
+
+const themeLabelMap: Record<ThemeOption, { label: string; icon: typeof Sun }> = {
+  light: { label: "ライトモード", icon: Sun },
+  dark: { label: "ダークモード", icon: Moon },
+  system: { label: "システム設定に合わせる", icon: Monitor },
+};
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
-  // hydration mismatchを防ぐため、マウント後にレンダリング
   useEffect(() => {
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
   if (!mounted) {
-    return (
-      <div className="page-header">
-        <h1>設定</h1>
-        <p>アプリケーションの設定を行います</p>
-      </div>
-    );
+    return <div className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />;
   }
 
+  const currentTheme = (theme ?? "system") as ThemeOption;
+
   return (
-    <div>
-      <div className="page-header">
-        <h1>設定</h1>
-        <p>アプリケーションの設定を行います</p>
-      </div>
+    <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <Card>
+        <CardHeader>
+          <CardTitle>テーマ設定</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {(["light", "dark", "system"] as ThemeOption[]).map((option) => {
+            const meta = themeLabelMap[option];
+            const Icon = meta.icon;
+            const active = currentTheme === option;
+            return (
+              <label
+                key={option}
+                className={`flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
+                  active
+                    ? "border-brand-300 bg-brand-50"
+                    : "border-slate-200 bg-white hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon className="size-4 text-slate-500" />
+                  <span className="text-sm font-medium text-slate-700">{meta.label}</span>
+                </div>
+                <input
+                  type="radio"
+                  name="theme"
+                  value={option}
+                  checked={active}
+                  onChange={() => setTheme(option)}
+                  className="size-4 accent-blue-600"
+                />
+              </label>
+            );
+          })}
+        </CardContent>
+      </Card>
 
-      <div className="card" style={{ maxWidth: "600px" }}>
-        <h2 className="card-title" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "12px", marginBottom: "20px" }}>
-          外観 (テーマ)
-        </h2>
-        
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
-            <input 
-              type="radio" 
-              name="theme" 
-              value="light" 
-              checked={theme === "light"} 
-              onChange={() => setTheme("light")} 
-              style={{ width: "20px", height: "20px", accentColor: "var(--accent)" }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "20px" }}>☀️</span>
-              <span style={{ fontWeight: 500 }}>ライトモード</span>
-            </div>
-          </label>
-          
-          <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
-            <input 
-              type="radio" 
-              name="theme" 
-              value="dark" 
-              checked={theme === "dark"} 
-              onChange={() => setTheme("dark")} 
-              style={{ width: "20px", height: "20px", accentColor: "var(--accent)" }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "20px" }}>🌙</span>
-              <span style={{ fontWeight: 500 }}>ダークモード</span>
-            </div>
-          </label>
-          
-          <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
-            <input 
-              type="radio" 
-              name="theme" 
-              value="system" 
-              checked={theme === "system"} 
-              onChange={() => setTheme("system")} 
-              style={{ width: "20px", height: "20px", accentColor: "var(--accent)" }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "20px" }}>💻</span>
-              <span style={{ fontWeight: 500 }}>システム設定に従う</span>
-            </div>
-          </label>
-        </div>
-
-        <h2 className="card-title" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "12px", marginBottom: "20px", marginTop: "40px" }}>
-          アカウント情報
-        </h2>
-        
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px", color: "var(--text-secondary)" }}>
-          <p><strong>ログイン中:</strong> {user?.email}</p>
-          <p><strong>ユーザーID:</strong> <code style={{ background: "var(--bg-secondary)", padding: "2px 6px", borderRadius: "4px" }}>{user?.uid}</code></p>
-          
-          <div style={{ marginTop: "24px" }}>
-            <button 
-              className="btn btn-danger" 
-              onClick={async () => {
-                await logout();
-                router.push("/login");
-              }}
-              style={{ width: "100%", maxWidth: "200px" }}
-            >
-              <span>🚪</span> ログアウト
-            </button>
+      <Card>
+        <CardHeader>
+          <CardTitle>アカウント</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+            <p className="text-slate-500">メールアドレス</p>
+            <p className="mt-1 break-all font-medium text-slate-900">{user?.email ?? "-"}</p>
           </div>
-        </div>
-      </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+            <p className="text-slate-500">ユーザーID</p>
+            <p className="mt-1 break-all font-mono text-xs text-slate-700">{user?.uid ?? "-"}</p>
+          </div>
+
+          <Button
+            variant="danger"
+            fullWidth
+            onClick={async () => {
+              await logout();
+              router.push("/login");
+            }}
+          >
+            <LogOut className="size-4" />
+            ログアウト
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
