@@ -1,13 +1,20 @@
-﻿import type { Marketplace, ShippingSpec } from "./simulation/types";
+import type { Marketplace, ShippingSpec } from "./simulation/types";
 
-import { getAuthTokenFromCookie } from "./auth-cookie";
+import { FirebaseError } from "firebase/app";
+import { onAuthStateChanged } from "firebase/auth";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  serverTimestamp,
+  Timestamp,
+  updateDoc,
+  writeBatch,
+} from "firebase/firestore";
 
-interface SupabaseErrorBody {
-  message?: string;
-  details?: string;
-  hint?: string;
-  code?: string;
-}
+import { getFirebaseAuth, getFirebaseDb } from "./firebase-client";
 
 export interface TimestampLike {
   toDate: () => Date;
@@ -29,38 +36,32 @@ export interface Item {
   shippingSpec?: ShippingSpec;
 }
 
-interface ItemRow {
-  id: string;
+interface ItemDocument {
   uid: string;
   title: string;
   description: string;
   category: string;
   condition: string;
   price: number;
-  marketplace: Marketplace | null;
+  marketplace?: Marketplace | null;
   status: "listed" | "sold";
-  created_at: string | null;
-  sold_at: string | null;
-  sold_price: number | null;
-  shipping_spec: ShippingSpec | null;
+  createdAt?: Timestamp | null;
+  soldAt?: Timestamp | null;
+  soldPrice?: number | null;
+  shippingSpec?: ShippingSpec | null;
 }
 
-function toTimestampLike(
-  value: string | null | undefined
-): TimestampLike | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return {
-    toDate: () => date,
-  };
+function getUserItemsCollection(uid: string) {
+  return collection(getFirebaseDb(), "users", uid, "items");
 }
 
-function mapItemRow(row: ItemRow): Item {
-  const createdAt = toTimestampLike(row.created_at);
+function getUserItemDoc(uid: string, itemId: string) {
+  return doc(getFirebaseDb(), "users", uid, "items", itemId);
+}
+
+function mapItemDocument(id: string, row: ItemDocument): Item {
   return {
-    id: row.id,
+    id,
     uid: row.uid,
     title: row.title,
     description: row.description,
@@ -69,208 +70,171 @@ function mapItemRow(row: ItemRow): Item {
     price: row.price,
     marketplace: row.marketplace ?? undefined,
     status: row.status,
-    createdAt: createdAt ?? undefined,
-    soldAt: toTimestampLike(row.sold_at),
-    soldPrice: row.sold_price,
-    shippingSpec: row.shipping_spec ?? undefined,
+    createdAt: row.createdAt ?? undefined,
+    soldAt: row.soldAt ?? null,
+    soldPrice: row.soldPrice ?? null,
+    shippingSpec: row.shippingSpec ?? undefined,
   };
 }
 
-function getSupabaseConfig(): {
-  url: string;
-  anonKey: string;
-  itemsTable: string;
-} {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const itemsTable = process.env.NEXT_PUBLIC_SUPABASE_ITEMS_TABLE ?? "items";
-
-  if (!url || !anonKey) {
-    throw new Error(
-      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
-    );
-  }
-
-  return { url, anonKey, itemsTable };
+function sortByCreatedAtDesc(items: Item[]): Item[] {
+  return items.sort((a, b) => {
+    const aTime = a.createdAt?.toDate().getTime() ?? 0;
+    const bTime = b.createdAt?.toDate().getTime() ?? 0;
+    return bTime - aTime;
+  });
 }
 
-async function requestSupabase<T>(
-  query: URLSearchParams,
-  init: RequestInit
-): Promise<T> {
-  const { url, anonKey, itemsTable } = getSupabaseConfig();
-  const accessToken = getAuthTokenFromCookie();
-  if (!accessToken) {
-    throw new Error("Authentication is required. Please sign in again.");
-  }
-  const headers = new Headers(init.headers);
-  headers.set("apikey", anonKey);
-  headers.set("Authorization", `Bearer ${accessToken}`);
-  if (init.body) {
-    headers.set("Content-Type", "application/json");
+async function getCurrentUid(): Promise<string> {
+  const auth = getFirebaseAuth();
+  if (auth.currentUser?.uid) {
+    return auth.currentUser.uid;
   }
 
-  const response = await fetch(
-    `${url}/rest/v1/${itemsTable}?${query.toString()}`,
-    {
-      ...init,
-      headers,
-    }
-  );
+  return new Promise<string>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      unsubscribe();
+      reject(new Error("Authentication is required. Please sign in again."));
+    }, 5000);
 
-  if (!response.ok) {
-    const errorBody = (await response
-      .json()
-      .catch(() => null)) as SupabaseErrorBody | null;
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      clearTimeout(timeoutId);
+      unsubscribe();
+      if (!nextUser?.uid) {
+        reject(new Error("Authentication is required. Please sign in again."));
+        return;
+      }
+      resolve(nextUser.uid);
+    });
+  });
+}
 
-    const parts = [
-      errorBody?.message,
-      errorBody?.details,
-      errorBody?.hint,
-      errorBody?.code ? `code: ${errorBody.code}` : null,
-    ].filter(Boolean);
+async function assertOwnedUser(uid: string): Promise<void> {
+  const currentUid = await getCurrentUid();
+  if (currentUid !== uid) {
+    throw new Error("Authenticated user does not match requested user.");
+  }
+}
 
-    throw new Error(
-      parts.length > 0
-        ? parts.join(" / ")
-        : `Supabase request failed (${response.status})`
-    );
+async function assertItemOwnership(uid: string, itemId: string): Promise<void> {
+  const ref = getUserItemDoc(uid, itemId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    throw new Error("Item not found.");
   }
 
-  if (response.status === 204) {
-    return undefined as T;
+  const data = snap.data() as Partial<ItemDocument>;
+  if (data.uid && data.uid !== uid) {
+    throw new Error("You do not have permission to modify this item.");
   }
-
-  const text = await response.text();
-  if (!text) return undefined as T;
-  return JSON.parse(text) as T;
 }
 
 export function getDatabaseClientErrorMessage(error: unknown): string {
+  if (error instanceof FirebaseError) {
+    switch (error.code) {
+      case "permission-denied":
+        return "権限がありません。Firestore Rulesを確認してください。";
+      case "unavailable":
+        return "データベースに接続できません。時間を置いて再試行してください。";
+      default:
+        return error.message;
+    }
+  }
+
   if (error instanceof Error) {
     return error.message;
   }
+
   return "An unexpected database error occurred.";
 }
 
 export const getFirestoreClientErrorMessage = getDatabaseClientErrorMessage;
 
-export async function getItems(_uid: string): Promise<Item[]> {
-  void _uid;
-  const query = new URLSearchParams({
-    select:
-      "id,uid,title,description,category,condition,price,marketplace,status,created_at,sold_at,sold_price,shipping_spec",
-    order: "created_at.desc",
-  });
+export async function getItems(uid: string): Promise<Item[]> {
+  await assertOwnedUser(uid);
 
-  const rows = await requestSupabase<ItemRow[]>(query, { method: "GET" });
-  return rows.map(mapItemRow);
+  const snapshot = await getDocs(getUserItemsCollection(uid));
+  const items = snapshot.docs.map((row) =>
+    mapItemDocument(row.id, row.data() as ItemDocument),
+  );
+
+  return sortByCreatedAtDesc(items);
 }
 
 export async function addItem(
-  item: Omit<Item, "id" | "createdAt" | "soldAt" | "soldPrice">
+  item: Omit<Item, "id" | "createdAt" | "soldAt" | "soldPrice">,
 ): Promise<string> {
-  const query = new URLSearchParams({
-    select: "id",
+  await assertOwnedUser(item.uid);
+
+  const docRef = await addDoc(getUserItemsCollection(item.uid), {
+    uid: item.uid,
+    title: item.title,
+    description: item.description,
+    category: item.category,
+    condition: item.condition,
+    price: item.price,
+    marketplace: item.marketplace ?? null,
+    status: "listed",
+    createdAt: serverTimestamp(),
+    soldAt: null,
+    soldPrice: null,
+    shippingSpec: item.shippingSpec ?? null,
   });
 
-  const rows = await requestSupabase<Array<{ id: string }>>(query, {
-    method: "POST",
-    headers: {
-      Prefer: "return=representation",
-    },
-    body: JSON.stringify({
-      title: item.title,
-      description: item.description,
-      category: item.category,
-      condition: item.condition,
-      price: item.price,
-      marketplace: item.marketplace ?? null,
-      status: "listed",
-      created_at: new Date().toISOString(),
-      sold_at: null,
-      sold_price: null,
-      shipping_spec: item.shippingSpec ?? null,
-    }),
-  });
-
-  const insertedId = rows[0]?.id;
-  if (!insertedId) {
-    throw new Error("Failed to insert item into Supabase.");
-  }
-  return insertedId;
+  return docRef.id;
 }
 
 export async function markAsSold(
-  _uid: string,
+  uid: string,
   itemId: string,
-  soldPrice: number
+  soldPrice: number,
 ): Promise<void> {
-  const query = new URLSearchParams({
-    id: `eq.${itemId}`,
-  });
+  await assertOwnedUser(uid);
+  await assertItemOwnership(uid, itemId);
 
-  await requestSupabase<void>(query, {
-    method: "PATCH",
-    headers: {
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify({
-      status: "sold",
-      sold_at: new Date().toISOString(),
-      sold_price: soldPrice,
-    }),
+  await updateDoc(getUserItemDoc(uid, itemId), {
+    status: "sold",
+    soldAt: serverTimestamp(),
+    soldPrice,
   });
 }
 
-export async function deleteItems(_uid: string, itemIds: string[]): Promise<void> {
+export async function deleteItems(uid: string, itemIds: string[]): Promise<void> {
   if (itemIds.length === 0) return;
 
-  const quotedIds = itemIds
-    .map((id) => `"${id.replace(/"/g, '\\"')}"`)
-    .join(",");
+  await assertOwnedUser(uid);
 
-  const query = new URLSearchParams({
-    id: `in.(${quotedIds})`,
+  const batch = writeBatch(getFirebaseDb());
+  await Promise.all(itemIds.map((itemId) => assertItemOwnership(uid, itemId)));
+
+  itemIds.forEach((itemId) => {
+    batch.delete(getUserItemDoc(uid, itemId));
   });
 
-  await requestSupabase<void>(query, {
-    method: "DELETE",
-    headers: {
-      Prefer: "return=minimal",
-    },
-  });
+  await batch.commit();
 }
 
 export async function updateItemSimulationInputs(
-  _uid: string,
+  uid: string,
   itemId: string,
   payload: {
     marketplace?: Marketplace;
     shippingSpec?: ShippingSpec;
-  }
+  },
 ): Promise<void> {
+  await assertOwnedUser(uid);
+  await assertItemOwnership(uid, itemId);
+
   const updatePayload: Record<string, unknown> = {};
 
   if (payload.marketplace) {
     updatePayload.marketplace = payload.marketplace;
   }
   if (payload.shippingSpec) {
-    updatePayload.shipping_spec = payload.shippingSpec;
+    updatePayload.shippingSpec = payload.shippingSpec;
   }
 
   if (Object.keys(updatePayload).length === 0) return;
 
-  const query = new URLSearchParams({
-    id: `eq.${itemId}`,
-  });
-
-  await requestSupabase<void>(query, {
-    method: "PATCH",
-    headers: {
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify(updatePayload),
-  });
+  await updateDoc(getUserItemDoc(uid, itemId), updatePayload);
 }
-

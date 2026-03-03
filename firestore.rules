@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ログイン必須
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // 自分のデータだけ
+    match /users/{userId}/items/{itemId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+  }
+}

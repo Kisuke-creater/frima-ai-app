@@ -8,12 +8,14 @@ import React, {
   ReactNode,
   useCallback,
 } from "react";
-import { clearAuthTokenCookie, getAuthTokenFromCookie } from "@/lib/auth-cookie";
+
+import { clearAuthTokenCookie, setAuthTokenCookie } from "@/lib/auth-cookie";
 import {
   AuthUser,
-  getUserFromAccessToken,
-  signOutWithAccessToken,
-} from "@/lib/supabase-auth";
+  getCurrentSession,
+  signOutCurrentUser,
+  subscribeAuthUser,
+} from "@/lib/firebase-auth";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -34,40 +36,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
-    const token = getAuthTokenFromCookie();
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return null;
-    }
-
-    setLoading(true);
-    try {
-      const nextUser = await getUserFromAccessToken(token);
-      setUser(nextUser);
-      return nextUser;
-    } catch {
+    const session = await getCurrentSession();
+    if (!session) {
       clearAuthTokenCookie();
       setUser(null);
       return null;
-    } finally {
-      setLoading(false);
     }
+
+    setAuthTokenCookie(session.accessToken, session.expiresIn);
+    setUser(session.user);
+    return session.user;
   }, []);
 
   useEffect(() => {
-    void refreshUser();
-  }, [refreshUser]);
+    const unsubscribe = subscribeAuthUser((nextUser) => {
+      setUser(nextUser);
+      if (!nextUser) {
+        clearAuthTokenCookie();
+      } else {
+        void getCurrentSession().then((session) => {
+          if (session) {
+            setAuthTokenCookie(session.accessToken, session.expiresIn);
+          }
+        });
+      }
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
 
   const logout = async () => {
-    const token = getAuthTokenFromCookie();
-    if (token) {
-      try {
-        await signOutWithAccessToken(token);
-      } catch {
-        // Ignore sign-out API errors and clear local session regardless.
-      }
-    }
+    await signOutCurrentUser().catch(() => {
+      // Ignore API errors and clear local session regardless.
+    });
     clearAuthTokenCookie();
     setUser(null);
   };

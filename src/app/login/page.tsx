@@ -3,91 +3,28 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+
 import { setAuthTokenCookie } from "@/lib/auth-cookie";
 import { useAuth } from "@/context/AuthContext";
 import {
-  buildGoogleOAuthUrl,
-  exchangeCodeForSession,
   signInWithEmailPassword,
-} from "@/lib/supabase-auth";
-
-const PKCE_VERIFIER_STORAGE_KEY = "google-oauth-pkce-verifier";
-const PKCE_VERIFIER_COOKIE_KEY = "google-oauth-pkce-verifier";
-
-function setPkceVerifierCookie(verifier: string): void {
-  document.cookie = `${PKCE_VERIFIER_COOKIE_KEY}=${encodeURIComponent(
-    verifier
-  )}; path=/; max-age=600; SameSite=Lax`;
-}
-
-function getPkceVerifierCookie(): string | null {
-  const raw = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${PKCE_VERIFIER_COOKIE_KEY}=`))
-    ?.split("=")[1];
-  return raw ? decodeURIComponent(raw) : null;
-}
-
-function clearPkceVerifierCookie(): void {
-  document.cookie = `${PKCE_VERIFIER_COOKIE_KEY}=; path=/; max-age=0; SameSite=Lax`;
-}
-
-function getOAuthParams(): URLSearchParams {
-  const hash = window.location.hash.startsWith("#")
-    ? window.location.hash.slice(1)
-    : window.location.hash;
-  const search = window.location.search.startsWith("?")
-    ? window.location.search.slice(1)
-    : window.location.search;
-
-  const merged = new URLSearchParams(search);
-  const hashParams = new URLSearchParams(hash);
-  hashParams.forEach((value, key) => merged.set(key, value));
-  return merged;
-}
-
-function decodeOAuthError(raw: string): string {
-  try {
-    return decodeURIComponent(raw.replace(/\+/g, "%20"));
-  } catch {
-    return raw;
-  }
-}
+  signInWithGooglePopup,
+} from "@/lib/firebase-auth";
 
 function mapAuthErrorMessage(raw: string): string {
   const normalized = raw.toLowerCase();
-  if (normalized.includes("email not confirmed")) {
-    return "メール認証が完了していません。認証メールのリンクを開いてからログインしてください。";
-  }
-  if (normalized.includes("invalid login credentials")) {
+  if (normalized.includes("invalid") || normalized.includes("credential")) {
     return "メールアドレスまたはパスワードが正しくありません。";
   }
-  if (normalized.includes("both auth code and code verifier should be non-empty")) {
-    return "Googleログイン情報の復元に失敗しました。もう一度Googleログインをお試しください。";
+  if (normalized.includes("popup")) {
+    return "Googleログインのポップアップが利用できませんでした。";
   }
   return raw;
 }
 
-function toBase64Url(bytes: Uint8Array): string {
-  const chars = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
-  return btoa(chars).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-async function createPkcePair(): Promise<{ verifier: string; challenge: string }> {
-  const verifierBytes = new Uint8Array(32);
-  crypto.getRandomValues(verifierBytes);
-  const verifier = toBase64Url(verifierBytes);
-
-  const encoder = new TextEncoder();
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(verifier));
-  const challenge = toBase64Url(new Uint8Array(digest));
-
-  return { verifier, challenge };
-}
-
 export default function LoginPage() {
   const router = useRouter();
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -99,71 +36,14 @@ export default function LoginPage() {
   const trimmedEmail = email.trim();
   const canSubmit = useMemo(
     () => trimmedEmail.length > 0 && password.length > 0,
-    [trimmedEmail, password]
+    [trimmedEmail, password],
   );
 
   useEffect(() => {
-    const params = getOAuthParams();
-    const accessToken = params.get("access_token");
-    const expiresInRaw = params.get("expires_in");
-    const authCode = params.get("code");
-    const oauthError = params.get("error_description") || params.get("error");
-
-    if (!accessToken && !authCode && !oauthError) return;
-
-    if (oauthError) {
-      setError(
-        mapAuthErrorMessage(decodeOAuthError(oauthError) || "Googleログインに失敗しました。")
-      );
-      window.history.replaceState({}, document.title, window.location.pathname);
-      setGoogleLoading(false);
-      return;
-    }
-
-    const completeLogin = async (token: string, expiresIn: number) => {
-      setAuthTokenCookie(token, expiresIn);
-      window.history.replaceState({}, document.title, window.location.pathname);
-
-      const authedUser = await refreshUser();
-      if (!authedUser) {
-        setError("Googleログイン後のユーザー情報取得に失敗しました。");
-        return;
-      }
+    if (user) {
       router.replace("/dashboard");
-    };
-
-    void (async () => {
-      setLoading(true);
-      try {
-        if (accessToken) {
-          const expiresIn = Number(expiresInRaw ?? "3600");
-          const safeExpiresIn =
-            Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3600;
-          await completeLogin(accessToken, safeExpiresIn);
-          return;
-        }
-
-        if (!authCode) return;
-        const codeVerifier =
-          localStorage.getItem(PKCE_VERIFIER_STORAGE_KEY) ??
-          getPkceVerifierCookie() ??
-          undefined;
-        const session = await exchangeCodeForSession(authCode, codeVerifier);
-        localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
-        clearPkceVerifierCookie();
-        await completeLogin(session.accessToken, session.expiresIn);
-      } catch (e: unknown) {
-        const message =
-          e instanceof Error
-            ? e.message
-            : "Googleログイン処理に失敗しました。もう一度お試しください。";
-        setError(mapAuthErrorMessage(message));
-      } finally {
-        setLoading(false);
-        setGoogleLoading(false);
-      }
-    })();
-  }, [refreshUser, router]);
+    }
+  }, [user, router]);
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -191,25 +71,20 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setError("");
     setGoogleLoading(true);
-
     try {
-      const redirectTo = `${window.location.origin}/login`;
-      if (!crypto?.subtle || !crypto?.getRandomValues) {
-        window.location.href = buildGoogleOAuthUrl(redirectTo, { flowType: "implicit" });
+      const session = await signInWithGooglePopup();
+      setAuthTokenCookie(session.accessToken, session.expiresIn);
+      const authedUser = await refreshUser();
+      if (!authedUser) {
+        setError("Googleログイン後のユーザー情報取得に失敗しました。");
         return;
       }
-
-      const { verifier, challenge } = await createPkcePair();
-      localStorage.setItem(PKCE_VERIFIER_STORAGE_KEY, verifier);
-      setPkceVerifierCookie(verifier);
-      window.location.href = buildGoogleOAuthUrl(redirectTo, {
-        flowType: "pkce",
-        codeChallenge: challenge,
-        codeChallengeMethod: "s256",
-      });
-    } catch {
-      const redirectTo = `${window.location.origin}/login`;
-      window.location.href = buildGoogleOAuthUrl(redirectTo, { flowType: "implicit" });
+      router.replace("/dashboard");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Googleログインに失敗しました。";
+      setError(mapAuthErrorMessage(message));
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -232,7 +107,7 @@ export default function LoginPage() {
           {googleLoading ? (
             <>
               <span className="spinner" />
-              Googleへ移動中...
+              Googleへ接続中...
             </>
           ) : (
             <>
@@ -316,15 +191,19 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <span className="spinner" />
-                  処理中...
+                  ログイン中...
                 </>
               ) : (
                 "ログインする"
               )}
             </button>
 
-            <Link href="/signup" className="btn btn-secondary btn-lg" style={{ width: "100%" }}>
-              新規作成ページへ
+            <Link
+              href="/signup"
+              className="btn btn-secondary btn-lg"
+              style={{ width: "100%" }}
+            >
+              新規登録ページへ
             </Link>
           </div>
         </form>

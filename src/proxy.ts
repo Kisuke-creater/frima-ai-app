@@ -21,7 +21,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Supabase Auth token is stored in cookie and checked here.
+  // Firebase Auth ID token is stored in cookie and checked here.
   const token = request.cookies.get("auth-token")?.value;
 
   if (!token) {

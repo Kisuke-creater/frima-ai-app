@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
-import { signUpWithEmailPassword } from "@/lib/supabase-auth";
+import { signUpWithEmailPassword } from "@/lib/firebase-auth";
 
 const LOWERCASE = "abcdefghjkmnpqrstuvwxyz";
 const UPPERCASE = "ABCDEFGHJKMNPQRSTUVWXYZ";
