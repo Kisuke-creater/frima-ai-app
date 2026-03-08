@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCheck, LoaderCircle, PlusCircle, Trash2 } from "lucide-react";
+import { CheckCheck, Copy, LoaderCircle, PlusCircle, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   deleteItems,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Input from "@/components/ui/Input";
+import Textarea from "@/components/ui/Textarea";
 import { cn } from "@/lib/cn";
 
 type Tab = "listed" | "sold";
@@ -37,6 +38,17 @@ const conditionLabel: Record<string, string> = {
   poor: "全体的に状態が悪い",
 };
 
+const marketplaceLabel: Record<string, string> = {
+  mercari: "メルカリ",
+  rakuma: "ラクマ",
+  yahoo: "Yahoo!フリマ",
+  yahoo_auction: "Yahoo!オークション",
+};
+
+function formatItemDate(value?: Item["createdAt"] | Item["soldAt"] | null): string {
+  return value ? value.toDate().toLocaleDateString("ja-JP") : "-";
+}
+
 export default function ItemsPage() {
   const { user } = useAuth();
 
@@ -50,6 +62,8 @@ export default function ItemsPage() {
   const [sellPriceInput, setSellPriceInput] = useState("");
   const [sellDialogError, setSellDialogError] = useState("");
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [copyMessage, setCopyMessage] = useState("");
 
   const fetchItems = async () => {
     if (!user) return;
@@ -84,6 +98,21 @@ export default function ItemsPage() {
   );
   const allFilteredSelected =
     filteredIds.length > 0 && selectedFilteredIds.length === filteredIds.length;
+  const activeItem = useMemo(() => {
+    if (filtered.length === 0) return null;
+    return filtered.find((item) => item.id === activeItemId) ?? filtered[0];
+  }, [filtered, activeItemId]);
+
+  useEffect(() => {
+    if (filtered.length === 0) {
+      if (activeItemId !== null) setActiveItemId(null);
+      return;
+    }
+    const exists = activeItemId ? filtered.some((item) => item.id === activeItemId) : false;
+    if (!exists) {
+      setActiveItemId(filtered[0]?.id ?? null);
+    }
+  }, [filtered, activeItemId]);
 
   const openSoldDialog = (item: Item) => {
     setSellDialogItem(item);
@@ -166,6 +195,45 @@ export default function ItemsPage() {
 
   const formatItemPrice = (item: Item) =>
     formatYen((item.status === "sold" ? item.soldPrice : item.price) ?? item.price ?? 0);
+
+  const copyDescription = async (description: string) => {
+    if (!description) {
+      setCopyMessage("紹介文が空のためコピーできません。");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(description);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = description;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+
+      setCopyMessage("紹介文をコピーしました。");
+    } catch {
+      setCopyMessage("コピーに失敗しました。");
+    }
+  };
+
+  useEffect(() => {
+    if (!copyMessage) return;
+    const timerId = window.setTimeout(() => setCopyMessage(""), 2200);
+    return () => window.clearTimeout(timerId);
+  }, [copyMessage]);
+
+  const selectItemForDetail = (item: Item) => {
+    if (!item.id) return;
+    setActiveItemId(item.id);
+    setCopyMessage("");
+  };
 
   return (
     <div className="space-y-5">
@@ -276,7 +344,24 @@ export default function ItemsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((item) => (
-            <Card key={item.id} className="overflow-hidden">
+            <Card
+              key={item.id}
+              className={cn(
+                "cursor-pointer overflow-hidden transition-colors",
+                item.id === activeItem?.id
+                  ? "border-brand-500 ring-2 ring-brand-100"
+                  : "hover:border-slate-300",
+              )}
+              onClick={() => selectItemForDetail(item)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  selectItemForDetail(item);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
               <CardHeader className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -285,6 +370,7 @@ export default function ItemsPage() {
                         type="checkbox"
                         checked={selectedIdSet.has(item.id)}
                         onChange={() => toggleItemSelection(item.id!)}
+                        onClick={(event) => event.stopPropagation()}
                         disabled={deleteLoading}
                         className="size-4 accent-blue-600"
                         aria-label={`${item.title} を選択`}
@@ -319,7 +405,10 @@ export default function ItemsPage() {
                   <Button
                     variant="success"
                     fullWidth
-                    onClick={() => openSoldDialog(item)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openSoldDialog(item);
+                    }}
                     disabled={soldLoading === item.id || deleteLoading}
                   >
                     {soldLoading === item.id ? (
@@ -339,6 +428,80 @@ export default function ItemsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {!loading && activeItem && (
+        <Card>
+          <CardHeader className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Badge variant={activeItem.status === "sold" ? "sold" : "listed"}>
+                  {activeItem.status === "sold" ? "販売済み" : "出品中"}
+                </Badge>
+                <Badge>{activeItem.category}</Badge>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void copyDescription(activeItem.description)}
+              >
+                <Copy className="size-4" />
+                紹介文をコピー
+              </Button>
+            </div>
+            <CardTitle>{activeItem.title}</CardTitle>
+            <CardDescription>選択したアイテムの詳細です。紹介文はそのままコピペできます。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-xs font-semibold text-slate-500">状態</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">
+                  {conditionLabel[activeItem.condition] ?? activeItem.condition}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-xs font-semibold text-slate-500">価格</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{formatItemPrice(activeItem)}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-xs font-semibold text-slate-500">出品先</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">
+                  {activeItem.marketplace
+                    ? marketplaceLabel[activeItem.marketplace] ?? activeItem.marketplace
+                    : "未設定"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-xs font-semibold text-slate-500">日付</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">
+                  登録: {formatItemDate(activeItem.createdAt)}
+                  {activeItem.soldAt && ` / 販売: ${formatItemDate(activeItem.soldAt)}`}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">紹介文</p>
+              <Textarea
+                readOnly
+                value={activeItem.description}
+                className="min-h-40 resize-y bg-white text-sm text-slate-700"
+              />
+            </div>
+
+            {copyMessage && (
+              <p
+                className={cn(
+                  "text-xs font-medium",
+                  copyMessage.includes("失敗") ? "text-rose-600" : "text-emerald-600",
+                )}
+              >
+                {copyMessage}
+              </p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {sellDialogItem && (
