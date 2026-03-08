@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { addItem, getFirestoreClientErrorMessage } from "@/lib/firestore";
+import { addItem, getFirestoreClientErrorMessage, getItems, type Item } from "@/lib/firestore";
 import type { Marketplace } from "@/lib/simulation/types";
 import Button from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -61,6 +61,70 @@ function makeImageId(): string {
 
 function formatYen(value: number): string {
   return `¥${value.toLocaleString("ja-JP")}`;
+}
+
+const CSV_HEADERS = [
+  "ID",
+  "User ID",
+  "Title",
+  "Description",
+  "Category",
+  "Condition",
+  "Listed Price",
+  "Status",
+  "Sold Price",
+  "Marketplace",
+  "Created At",
+  "Sold At",
+] as const;
+
+function escapeCsvValue(value: string | number): string {
+  const text = String(value);
+  if (!/[",\r\n]/.test(text)) return text;
+  return `"${text.replace(/"/g, "\"\"")}"`;
+}
+
+function formatTimestamp(timestampLike?: Item["createdAt"] | Item["soldAt"]): string {
+  if (!timestampLike) return "";
+  return timestampLike.toDate().toISOString();
+}
+
+function createItemsCsv(items: Item[]): string {
+  const rows: (string | number)[][] = [
+    [...CSV_HEADERS],
+    ...items.map((item) => [
+      item.id ?? "",
+      item.uid,
+      item.title,
+      item.description,
+      item.category,
+      item.condition,
+      item.price ?? "",
+      item.status,
+      item.soldPrice ?? "",
+      item.marketplace ?? "",
+      formatTimestamp(item.createdAt),
+      formatTimestamp(item.soldAt),
+    ]),
+  ];
+
+  return rows
+    .map((row) => row.map((value) => escapeCsvValue(value)).join(","))
+    .join("\r\n");
+}
+
+function downloadItemsCsv(csv: string, fileName: string): void {
+  const blob = new Blob(["\uFEFF", csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export default function GeneratePage() {
@@ -275,6 +339,9 @@ export default function GeneratePage() {
         marketplace,
         status: "listed",
       });
+      const latestItems = await getItems(user.uid);
+      const csv = createItemsCsv(latestItems);
+      downloadItemsCsv(csv, "items_latest.csv");
       router.push("/items");
     } catch (cause: unknown) {
       setError(getFirestoreClientErrorMessage(cause));

@@ -87,14 +87,26 @@ export async function POST(request: NextRequest) {
 
     content.push({
       type: "text",
-      text: `以下は同一商品の複数写真です。全ての画像を総合して${marketplaceName}向けの出品情報を作成してください。
+      text: `あなたはフリマ出品のプロです。以下は同一商品の複数写真です。全ての画像を総合して${marketplaceName}向けの出品情報を作成してください。
 状態は「${conditionText}」です。${extraInfoText}
 
+売れやすさを重視して作成してください。
+以下の点を考慮してください。
+- 商品名は検索されやすいキーワードを含める
+- ブランド名・特徴・用途などをタイトルに含める
+- 商品説明は購入者が安心できる内容にする
+- 商品の特徴、用途、サイズ感などを簡潔に説明する
+- 相場を想定した価格を提案する
+- 不明な情報は画像から推測できる範囲で補完する
+
 次の条件で日本語のJSONのみを返してください。
+
 - title: 30文字以内
 - description: 80〜180文字
 - category: 出品に適したカテゴリ名
-- price_low / price_mid / price_high: 数値（整数）
+- price_low: 早く売りたい場合の価格（整数）
+- price_mid: 標準的な価格（整数）
+- price_high: 強気価格（整数）
 - condition_note: 状態に関する補足（任意）
 
 出力フォーマット:

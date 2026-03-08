@@ -51,6 +51,21 @@ interface ItemDocument {
   shippingSpec?: ShippingSpec | null;
 }
 
+export interface ImportItemInput {
+  uid: string;
+  title: string;
+  description: string;
+  category: string;
+  condition: string;
+  price: number;
+  marketplace?: Marketplace;
+  status?: "listed" | "sold";
+  soldPrice?: number | null;
+  createdAt?: Date | null;
+  soldAt?: Date | null;
+  shippingSpec?: ShippingSpec;
+}
+
 function getUserItemsCollection(uid: string) {
   return collection(getFirebaseDb(), "users", uid, "items");
 }
@@ -150,6 +165,8 @@ export function getDatabaseClientErrorMessage(error: unknown): string {
 
 export const getFirestoreClientErrorMessage = getDatabaseClientErrorMessage;
 
+const MAX_BATCH_WRITE_COUNT = 450;
+
 export async function getItems(uid: string): Promise<Item[]> {
   await assertOwnedUser(uid);
 
@@ -182,6 +199,50 @@ export async function addItem(
   });
 
   return docRef.id;
+}
+
+export async function importItems(uid: string, items: ImportItemInput[]): Promise<void> {
+  if (items.length === 0) return;
+
+  await assertOwnedUser(uid);
+
+  for (const item of items) {
+    if (item.uid !== uid) {
+      throw new Error("CSV内のユーザーIDが現在のログインユーザーと一致しません。");
+    }
+  }
+
+  for (let index = 0; index < items.length; index += MAX_BATCH_WRITE_COUNT) {
+    const batch = writeBatch(getFirebaseDb());
+    const chunk = items.slice(index, index + MAX_BATCH_WRITE_COUNT);
+
+    chunk.forEach((item) => {
+      const status = item.status === "sold" ? "sold" : "listed";
+      const soldPrice = status === "sold" ? (item.soldPrice ?? item.price) : null;
+
+      batch.set(doc(getUserItemsCollection(uid)), {
+        uid: item.uid,
+        title: item.title,
+        description: item.description,
+        category: item.category,
+        condition: item.condition,
+        price: item.price,
+        marketplace: item.marketplace ?? null,
+        status,
+        createdAt: item.createdAt ? Timestamp.fromDate(item.createdAt) : serverTimestamp(),
+        soldAt:
+          status === "sold"
+            ? item.soldAt
+              ? Timestamp.fromDate(item.soldAt)
+              : serverTimestamp()
+            : null,
+        soldPrice,
+        shippingSpec: item.shippingSpec ?? null,
+      });
+    });
+
+    await batch.commit();
+  }
 }
 
 export async function markAsSold(
