@@ -31,6 +31,13 @@ const PAGE_META: Array<{ matcher: (pathname: string) => boolean; meta: HeaderMet
     },
   },
   {
+    matcher: (pathname) => pathname.startsWith("/simulator?tab=market-analysis"),
+    meta: {
+      title: "Market Analysis",
+      description: "販売先おすすめAIで出品先・価格・売れやすさを比較します。",
+    },
+  },
+  {
     matcher: (pathname) => pathname.startsWith("/simulator"),
     meta: {
       title: "Profit Simulation",
@@ -57,7 +64,8 @@ interface HeaderProps {
 
 export default function Header({ pathname, userLabel }: HeaderProps) {
   const meta = resolveMeta(pathname);
-  const showCreateButton = pathname !== "/generate";
+  const basePath = pathname.split("?")[0];
+  const showCreateButton = basePath !== "/generate";
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50/95 backdrop-blur">

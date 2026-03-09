@@ -11,5 +11,9 @@ service cloud.firestore {
     match /users/{userId}/items/{itemId} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
+
+    match /users/{userId}/analyses/{analysisId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
   }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCheck, Copy, LoaderCircle, PlusCircle, Trash2 } from "lucide-react";
+import { CheckCheck, Copy, LoaderCircle, PlusCircle, Trash2, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   deleteItems,
@@ -62,7 +62,7 @@ export default function ItemsPage() {
   const [sellPriceInput, setSellPriceInput] = useState("");
   const [sellDialogError, setSellDialogError] = useState("");
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [detailDialogItemId, setDetailDialogItemId] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
 
   const fetchItems = async () => {
@@ -98,21 +98,32 @@ export default function ItemsPage() {
   );
   const allFilteredSelected =
     filteredIds.length > 0 && selectedFilteredIds.length === filteredIds.length;
-  const activeItem = useMemo(() => {
-    if (filtered.length === 0) return null;
-    return filtered.find((item) => item.id === activeItemId) ?? filtered[0];
-  }, [filtered, activeItemId]);
+  const detailDialogItem = useMemo(() => {
+    if (!detailDialogItemId) return null;
+    return items.find((item) => item.id === detailDialogItemId) ?? null;
+  }, [items, detailDialogItemId]);
 
   useEffect(() => {
-    if (filtered.length === 0) {
-      if (activeItemId !== null) setActiveItemId(null);
-      return;
+    if (!detailDialogItemId) return;
+    const existsInCurrentTab = filtered.some((item) => item.id === detailDialogItemId);
+    if (!existsInCurrentTab) {
+      setDetailDialogItemId(null);
+      setCopyMessage("");
     }
-    const exists = activeItemId ? filtered.some((item) => item.id === activeItemId) : false;
-    if (!exists) {
-      setActiveItemId(filtered[0]?.id ?? null);
-    }
-  }, [filtered, activeItemId]);
+  }, [filtered, detailDialogItemId]);
+
+  useEffect(() => {
+    if (!detailDialogItemId) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDetailDialogItemId(null);
+        setCopyMessage("");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [detailDialogItemId]);
 
   const openSoldDialog = (item: Item) => {
     setSellDialogItem(item);
@@ -231,7 +242,12 @@ export default function ItemsPage() {
 
   const selectItemForDetail = (item: Item) => {
     if (!item.id) return;
-    setActiveItemId(item.id);
+    setDetailDialogItemId(item.id);
+    setCopyMessage("");
+  };
+
+  const closeDetailDialog = () => {
+    setDetailDialogItemId(null);
     setCopyMessage("");
   };
 
@@ -348,7 +364,7 @@ export default function ItemsPage() {
               key={item.id}
               className={cn(
                 "cursor-pointer overflow-hidden transition-colors",
-                item.id === activeItem?.id
+                item.id === detailDialogItem?.id
                   ? "border-brand-500 ring-2 ring-brand-100"
                   : "hover:border-slate-300",
               )}
@@ -430,78 +446,103 @@ export default function ItemsPage() {
         </div>
       )}
 
-      {!loading && activeItem && (
-        <Card>
-          <CardHeader className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Badge variant={activeItem.status === "sold" ? "sold" : "listed"}>
-                  {activeItem.status === "sold" ? "販売済み" : "出品中"}
-                </Badge>
-                <Badge>{activeItem.category}</Badge>
+      {detailDialogItem && (
+        <div
+          className="fixed inset-0 z-40 grid place-items-center bg-slate-900/45 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="item-detail-dialog-title"
+          onClick={closeDetailDialog}
+        >
+          <Card
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <CardHeader className="space-y-3 border-b border-slate-100 bg-white/90">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant={detailDialogItem.status === "sold" ? "sold" : "listed"}>
+                    {detailDialogItem.status === "sold" ? "販売済み" : "出品中"}
+                  </Badge>
+                  <Badge>{detailDialogItem.category}</Badge>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={closeDetailDialog}
+                  aria-label="商品詳細ポップアップを閉じる"
+                >
+                  <X className="size-4" />
+                </Button>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void copyDescription(activeItem.description)}
-              >
-                <Copy className="size-4" />
-                紹介文をコピー
-              </Button>
-            </div>
-            <CardTitle>{activeItem.title}</CardTitle>
-            <CardDescription>選択したアイテムの詳細です。紹介文はそのままコピペできます。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                <p className="text-xs font-semibold text-slate-500">状態</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {conditionLabel[activeItem.condition] ?? activeItem.condition}
-                </p>
+              <CardTitle id="item-detail-dialog-title">{detailDialogItem.title}</CardTitle>
+              <CardDescription>
+                商品の詳細を確認できます。紹介文はそのままコピペできます。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 bg-white p-6">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-slate-500">状態</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">
+                    {conditionLabel[detailDialogItem.condition] ?? detailDialogItem.condition}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-slate-500">価格</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">
+                    {formatItemPrice(detailDialogItem)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-slate-500">出品先</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">
+                    {detailDialogItem.marketplace
+                      ? marketplaceLabel[detailDialogItem.marketplace] ?? detailDialogItem.marketplace
+                      : "未設定"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-slate-500">日付</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">
+                    登録: {formatItemDate(detailDialogItem.createdAt)}
+                    {detailDialogItem.soldAt && ` / 販売: ${formatItemDate(detailDialogItem.soldAt)}`}
+                  </p>
+                </div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                <p className="text-xs font-semibold text-slate-500">価格</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">{formatItemPrice(activeItem)}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                <p className="text-xs font-semibold text-slate-500">出品先</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {activeItem.marketplace
-                    ? marketplaceLabel[activeItem.marketplace] ?? activeItem.marketplace
-                    : "未設定"}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                <p className="text-xs font-semibold text-slate-500">日付</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  登録: {formatItemDate(activeItem.createdAt)}
-                  {activeItem.soldAt && ` / 販売: ${formatItemDate(activeItem.soldAt)}`}
-                </p>
-              </div>
-            </div>
 
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">紹介文</p>
-              <Textarea
-                readOnly
-                value={activeItem.description}
-                className="min-h-40 resize-y bg-white text-sm text-slate-700"
-              />
-            </div>
+              <div>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">紹介文</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void copyDescription(detailDialogItem.description)}
+                  >
+                    <Copy className="size-4" />
+                    紹介文をコピー
+                  </Button>
+                </div>
+                <Textarea
+                  readOnly
+                  value={detailDialogItem.description}
+                  className="min-h-40 resize-y bg-white text-sm text-slate-700"
+                />
+              </div>
 
-            {copyMessage && (
-              <p
-                className={cn(
-                  "text-xs font-medium",
-                  copyMessage.includes("失敗") ? "text-rose-600" : "text-emerald-600",
-                )}
-              >
-                {copyMessage}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+              {copyMessage && (
+                <p
+                  className={cn(
+                    "text-xs font-medium",
+                    copyMessage.includes("失敗") ? "text-rose-600" : "text-emerald-600",
+                  )}
+                >
+                  {copyMessage}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {sellDialogItem && (

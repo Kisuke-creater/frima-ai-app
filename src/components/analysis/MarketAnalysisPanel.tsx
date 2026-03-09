@@ -1,28 +1,24 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import {
-  FileText,
-  ImagePlus,
-  LoaderCircle,
-  Sparkles,
-  Tag,
-  WandSparkles,
-  X,
-} from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { ImagePlus, LoaderCircle, Sparkles, TrendingUp, WandSparkles, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { addItem, getFirestoreClientErrorMessage } from "@/lib/firestore";
-import type { Marketplace } from "@/lib/simulation/types";
+import { addMarketAnalysis, getFirestoreClientErrorMessage } from "@/lib/firestore";
+import type {
+  ItemCondition,
+  ProductMarketAnalysisResponse,
+  ProductMarketAnalysisResult,
+} from "@/lib/market-analysis/types";
 import Button from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
-import ItemForm from "@/components/items/ItemForm";
 import Badge from "@/components/ui/Badge";
+import AnalysisInputForm from "@/components/analysis/AnalysisInputForm";
+import PlatformComparisonTable from "@/components/analysis/PlatformComparisonTable";
 import { cn } from "@/lib/cn";
 
 const MAX_IMAGES = 6;
 
-const CONDITIONS = [
+const CONDITIONS: Array<{ value: ItemCondition; label: string }> = [
   { value: "new", label: "新品・未使用" },
   { value: "like_new", label: "未使用に近い" },
   { value: "good", label: "目立った傷や汚れなし" },
@@ -30,22 +26,11 @@ const CONDITIONS = [
   { value: "poor", label: "全体的に状態が悪い" },
 ];
 
-const MARKETPLACES: Array<{ value: Marketplace; label: string }> = [
-  { value: "mercari", label: "メルカリ" },
-  { value: "rakuma", label: "ラクマ" },
-  { value: "yahoo", label: "Yahoo!フリマ" },
-  { value: "yahoo_auction", label: "Yahoo!オークション" },
-];
-
-interface GenerateResult {
-  title: string;
-  description: string;
-  category: string;
-  price_low: number;
-  price_mid: number;
-  price_high: number;
-  condition_note: string;
-}
+const DEMAND_LABELS: Record<ProductMarketAnalysisResult["demandLevel"], string> = {
+  high: "高い",
+  medium: "中程度",
+  low: "低い",
+};
 
 interface ProcessedImage {
   id: string;
@@ -63,21 +48,23 @@ function formatYen(value: number): string {
   return `¥${value.toLocaleString("ja-JP")}`;
 }
 
-export default function GeneratePage() {
+function formatSellDays(minDays: number, maxDays: number): string {
+  return `${minDays}〜${maxDays}日`;
+}
+
+export default function MarketAnalysisPanel() {
   const { user } = useAuth();
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [images, setImages] = useState<ProcessedImage[]>([]);
-  const [itemName, setItemName] = useState("");
-  const [accessories, setAccessories] = useState("");
-  const [condition, setCondition] = useState("good");
-  const [marketplace, setMarketplace] = useState<Marketplace>("mercari");
-  const [generating, setGenerating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState<GenerateResult | null>(null);
-  const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [condition, setCondition] = useState<ItemCondition>("good");
+  const [result, setResult] = useState<ProductMarketAnalysisResult | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saveMessageType, setSaveMessageType] = useState<"success" | "warning" | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const processImageFile = useCallback((file: File): Promise<ProcessedImage | null> => {
@@ -91,23 +78,21 @@ export default function GeneratePage() {
         fileName.endsWith(".heic") ||
         fileName.endsWith(".heif")
       ) {
-        setError(
-          "HEIC/HEIF形式は未対応です。iPhone写真はJPEG/PNGへ変換してからアップロードしてください。",
-        );
+        setError("HEIC/HEIF形式は未対応です。JPEG/PNGに変換してからアップロードしてください。");
         resolve(null);
         return;
       }
 
       if (!validTypes.includes(file.type)) {
-        setError("対応形式は JPG / PNG / WEBP / GIF です。");
+        setError("対応形式は JPG / PNG / WEBP / GIF のみです。");
         resolve(null);
         return;
       }
 
       const reader = new FileReader();
       reader.onload = (event) => {
-        const src = event.target?.result;
-        if (typeof src !== "string") {
+        const source = event.target?.result;
+        if (typeof source !== "string") {
           setError("画像の読み込みに失敗しました。");
           resolve(null);
           return;
@@ -145,7 +130,7 @@ export default function GeneratePage() {
           const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
           const base64 = dataUrl.split(",")[1];
           if (!base64) {
-            setError("画像変換に失敗しました。");
+            setError("画像の変換に失敗しました。");
             resolve(null);
             return;
           }
@@ -164,7 +149,7 @@ export default function GeneratePage() {
           resolve(null);
         };
 
-        image.src = src;
+        image.src = source;
       };
 
       reader.onerror = () => {
@@ -193,8 +178,9 @@ export default function GeneratePage() {
       if (validImages.length > 0) {
         setImages((prev) => [...prev, ...validImages]);
         setResult(null);
-        setSelectedPrice(null);
         setError("");
+        setSaveMessage("");
+        setSaveMessageType(null);
       }
 
       if (files.length > targetFiles.length) {
@@ -213,18 +199,25 @@ export default function GeneratePage() {
     [handleFiles],
   );
 
-  const handleGenerate = async () => {
+  const handleAnalyze = async () => {
     if (images.length === 0) {
       setError("画像を1枚以上アップロードしてください。");
       return;
     }
 
-    setGenerating(true);
+    if (!title.trim()) {
+      setError("商品タイトルを入力してください。");
+      return;
+    }
+
+    setAnalyzing(true);
     setError("");
     setResult(null);
+    setSaveMessage("");
+    setSaveMessageType(null);
 
     try {
-      const response = await fetch("/api/generate", {
+      const response = await fetch("/api/market-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -232,67 +225,63 @@ export default function GeneratePage() {
             imageBase64: image.base64,
             mimeType: image.mimeType,
           })),
+          title: title.trim(),
+          description: description.trim(),
           condition,
-          itemName,
-          accessories,
-          marketplace,
         }),
       });
 
       if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "生成に失敗しました。");
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? "商品分析に失敗しました。");
       }
 
-      const data = (await response.json()) as GenerateResult;
-      setResult(data);
-      setSelectedPrice(data.price_mid);
+      const payload = (await response.json()) as ProductMarketAnalysisResponse;
+      setResult(payload.result);
+
+      if (user) {
+        try {
+          await addMarketAnalysis({
+            uid: user.uid,
+            inputTitle: title.trim(),
+            inputDescription: description.trim(),
+            inputCondition: condition,
+            imageCount: images.length,
+            ...payload.result,
+          });
+          setSaveMessage("分析結果をFirebaseに保存しました。");
+          setSaveMessageType("success");
+        } catch (saveError: unknown) {
+          setSaveMessage(
+            `分析結果の保存に失敗しました: ${getFirestoreClientErrorMessage(saveError)}`,
+          );
+          setSaveMessageType("warning");
+        }
+      } else {
+        setSaveMessage("ログインすると分析結果をFirebaseに保存できます。");
+        setSaveMessageType("warning");
+      }
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "エラーが発生しました。");
     } finally {
-      setGenerating(false);
+      setAnalyzing(false);
     }
   };
 
-  const handleSave = async () => {
-    if (!result || !selectedPrice) return;
-    if (!user) {
-      setError("ログイン状態を確認してください。");
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-
-    try {
-      await addItem({
-        uid: user.uid,
-        title: result.title,
-        description: result.description,
-        category: result.category,
-        condition,
-        price: selectedPrice,
-        marketplace,
-        status: "listed",
-      });
-      router.push("/items");
-    } catch (cause: unknown) {
-      setError(getFirestoreClientErrorMessage(cause));
-    } finally {
-      setSaving(false);
-    }
-  };
+  const recommendedPlatform = result?.platforms.find(
+    (platform) => platform.platform === result.recommendedPlatform,
+  );
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <section className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ImagePlus className="size-4 text-brand-600" />
-              Product Images
+              商品画像
             </CardTitle>
-            <CardDescription>画像はドラッグ&ドロップでも追加できます。</CardDescription>
+            <CardDescription>最大6枚まで。画像が多いほど分析精度が上がります。</CardDescription>
           </CardHeader>
           <CardContent>
             <div
@@ -355,7 +344,8 @@ export default function GeneratePage() {
                         onClick={() => {
                           setImages((prev) => prev.filter((item) => item.id !== image.id));
                           setResult(null);
-                          setSelectedPrice(null);
+                          setSaveMessage("");
+                          setSaveMessageType(null);
                         }}
                         aria-label={`画像 ${index + 1} を削除`}
                         className="absolute right-2 top-2 grid size-7 place-items-center rounded-full bg-slate-900/70 text-white opacity-0 transition group-hover:opacity-100"
@@ -378,7 +368,8 @@ export default function GeneratePage() {
                     onClick={() => {
                       setImages([]);
                       setResult(null);
-                      setSelectedPrice(null);
+                      setSaveMessage("");
+                      setSaveMessageType(null);
                     }}
                   >
                     画像をクリア
@@ -389,17 +380,23 @@ export default function GeneratePage() {
           </CardContent>
         </Card>
 
-        <ItemForm
-          itemName={itemName}
-          accessories={accessories}
+        <AnalysisInputForm
+          title={title}
+          description={description}
           condition={condition}
-          marketplace={marketplace}
           conditionOptions={CONDITIONS}
-          marketplaceOptions={MARKETPLACES}
-          onItemNameChange={setItemName}
-          onAccessoriesChange={setAccessories}
-          onConditionChange={setCondition}
-          onMarketplaceChange={setMarketplace}
+          onTitleChange={(value) => {
+            setTitle(value);
+            setResult(null);
+          }}
+          onDescriptionChange={(value) => {
+            setDescription(value);
+            setResult(null);
+          }}
+          onConditionChange={(value) => {
+            setCondition(value);
+            setResult(null);
+          }}
         />
 
         {error && (
@@ -408,148 +405,189 @@ export default function GeneratePage() {
           </div>
         )}
 
+        {saveMessage && (
+          <div
+            className={cn(
+              "rounded-xl px-4 py-3 text-sm",
+              saveMessageType === "success"
+                ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border border-amber-200 bg-amber-50 text-amber-700",
+            )}
+          >
+            {saveMessage}
+          </div>
+        )}
+
         <Button
           variant="primary"
           size="lg"
           fullWidth
-          onClick={handleGenerate}
-          disabled={generating || images.length === 0}
+          onClick={handleAnalyze}
+          disabled={analyzing || images.length === 0}
         >
-          {generating ? (
+          {analyzing ? (
             <>
               <LoaderCircle className="size-4 animate-spin" />
-              AIで生成中...
+              分析中...
             </>
           ) : (
             <>
               <WandSparkles className="size-4" />
-              AIで出品情報を生成
+              販売先おすすめAIで分析
             </>
           )}
         </Button>
       </section>
 
       <section className="space-y-6">
-        {!result && !generating && (
+        {!result && !analyzing && (
           <Card className="h-full">
             <CardContent className="flex min-h-96 flex-col items-center justify-center text-center">
               <div className="grid size-16 place-items-center rounded-full bg-brand-50 text-brand-600">
                 <Sparkles className="size-8" />
               </div>
-              <h2 className="mt-4 text-lg font-semibold text-slate-900">AI Result</h2>
+              <h2 className="mt-4 text-lg font-semibold text-slate-900">商品分析結果</h2>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
-                画像と商品情報を入力すると、タイトル・カテゴリ・説明文・価格候補を表示します。
+                商品画像とタイトルを入力すると、最適な販売先と価格・売れやすさを比較表示します。
               </p>
             </CardContent>
           </Card>
         )}
 
-        {generating && (
+        {analyzing && (
           <Card>
             <CardContent className="flex min-h-72 flex-col items-center justify-center text-center">
               <LoaderCircle className="size-8 animate-spin text-brand-600" />
               <p className="mt-4 text-sm font-medium text-slate-700">
-                画像を解析して出品情報を作成しています...
+                画像を解析して販売先を推定しています...
               </p>
-              <p className="mt-1 text-xs text-slate-500">通常10〜20秒程度で完了します</p>
+              <p className="mt-1 text-xs text-slate-500">通常10〜20秒ほどで完了します</p>
             </CardContent>
           </Card>
         )}
 
         {result && (
           <>
-            <Card>
+            <Card className="border-brand-200 bg-gradient-to-br from-white to-brand-50/60">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Tag className="size-4 text-brand-600" />
-                  タイトル
+                <CardTitle className="flex items-center gap-2 text-brand-700">
+                  <TrendingUp className="size-5" />
+                  おすすめ販売先
                 </CardTitle>
+                <CardDescription>AIが市場需要と利益見込みから算出</CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-base font-semibold text-slate-900">{result.title}</p>
-                {result.condition_note && (
-                  <p className="mt-2 text-xs text-slate-500">補足: {result.condition_note}</p>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="text-sm">{recommendedPlatform?.platformLabel ?? "-"}</Badge>
+                  <span className="text-xs text-slate-500">
+                    売れるまで:{" "}
+                    {formatSellDays(result.estimatedSellDaysMin, result.estimatedSellDaysMax)}
+                  </span>
+                </div>
+                <p className="text-sm leading-relaxed text-slate-700">{result.recommendationReason}</p>
+                {recommendedPlatform && (
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <p className="text-xs text-slate-500">推定価格</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {formatYen(recommendedPlatform.estimatedPrice)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <p className="text-xs text-slate-500">売れる確率</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {recommendedPlatform.sellProbability}%
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <p className="text-xs text-slate-500">期待利益</p>
+                      <p className="mt-1 text-sm font-semibold text-emerald-700">
+                        {formatYen(recommendedPlatform.expectedProfit)}
+                      </p>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Tag className="size-4 text-brand-600" />
-                  カテゴリ
-                </CardTitle>
+                <CardTitle>分析サマリー</CardTitle>
               </CardHeader>
-              <CardContent>
-                <Badge>{result.category}</Badge>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    商品カテゴリ
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{result.category}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    需要レベル
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {DEMAND_LABELS[result.demandLevel]}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    推定相場
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {formatYen(result.overallPriceLow)} 〜 {formatYen(result.overallPriceHigh)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    状態メモ
+                  </p>
+                  <p className="mt-1 text-sm text-slate-700">{result.conditionNote}</p>
+                </div>
+              </CardContent>
+              <CardContent className="pt-0">
+                <p className="text-sm leading-relaxed text-slate-600">{result.demandSummary}</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="size-4 text-brand-600" />
-                  説明文
-                </CardTitle>
+                <CardTitle>プラットフォーム比較表</CardTitle>
+                <CardDescription>
+                  推定価格・売れる確率・売れるまでの期間・手数料/送料を比較
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm leading-relaxed text-slate-700">{result.description}</p>
+                <PlatformComparisonTable
+                  rows={result.platforms}
+                  recommendedPlatform={result.recommendedPlatform}
+                />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="size-4 text-brand-600" />
-                  価格候補（選択）
-                </CardTitle>
-                <CardDescription>保存する価格を選んでください。</CardDescription>
+                <CardTitle>AI提案の出品文</CardTitle>
+                <CardDescription>
+                  将来の「ワンクリック出品」「自動説明文生成」に使える構造で返却
+                </CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-3">
-                {[
-                  { label: "低め", value: result.price_low },
-                  { label: "推奨", value: result.price_mid },
-                  { label: "高め", value: result.price_high },
-                ].map((option) => {
-                  const selected = selectedPrice === option.value;
-                  return (
-                    <button
-                      key={option.label}
-                      type="button"
-                      onClick={() => setSelectedPrice(option.value)}
-                      className={cn(
-                        "rounded-xl border px-3 py-4 text-center transition-colors",
-                        selected
-                          ? "border-brand-300 bg-brand-50 text-brand-700"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-brand-200 hover:bg-brand-50/40",
-                      )}
-                    >
-                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                        {option.label}
-                      </p>
-                      <p className="mt-2 text-xl font-bold">{formatYen(option.value)}</p>
-                    </button>
-                  );
-                })}
+              <CardContent className="space-y-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    提案タイトル
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{result.suggestedTitle}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    提案説明文
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                    {result.suggestedDescription}
+                  </p>
+                </div>
               </CardContent>
             </Card>
-
-            <Button
-              variant="success"
-              size="lg"
-              fullWidth
-              onClick={handleSave}
-              disabled={saving || !selectedPrice}
-            >
-              {saving ? (
-                <>
-                  <LoaderCircle className="size-4 animate-spin" />
-                  保存中...
-                </>
-              ) : (
-                "この内容で保存する"
-              )}
-            </Button>
           </>
         )}
       </section>

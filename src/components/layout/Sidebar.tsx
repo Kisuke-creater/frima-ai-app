@@ -5,6 +5,7 @@ import {
   Package,
   Settings,
   Sparkles,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -19,12 +20,33 @@ export const APP_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/generate", label: "Product Registration", icon: Sparkles },
   { href: "/items", label: "Items", icon: Package },
-  { href: "/simulator", label: "Profit Simulation", icon: Calculator },
+  { href: "/simulator?tab=profit", label: "Profit Simulation", icon: Calculator },
+  { href: "/simulator?tab=market-analysis", label: "Market Analysis", icon: TrendingUp },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-function isActivePath(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+function splitPathAndQuery(input: string): { path: string; query: URLSearchParams } {
+  const [path, query = ""] = input.split("?");
+  return {
+    path,
+    query: new URLSearchParams(query),
+  };
+}
+
+function isActivePath(currentLocation: string, href: string): boolean {
+  const current = splitPathAndQuery(currentLocation);
+  const target = splitPathAndQuery(href);
+
+  const pathMatched =
+    current.path === target.path || current.path.startsWith(`${target.path}/`);
+  if (!pathMatched) return false;
+
+  const targetQueryEntries = Array.from(target.query.entries());
+  if (targetQueryEntries.length === 0) return true;
+
+  return targetQueryEntries.every(
+    ([key, value]) => current.query.get(key) === value,
+  );
 }
 
 interface SidebarProps {
@@ -86,7 +108,7 @@ interface MobileNavProps {
 export function MobileNav({ pathname }: MobileNavProps) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/96 px-2 py-2 backdrop-blur lg:hidden">
-      <ul className="grid grid-cols-5 gap-1">
+      <ul className="grid grid-cols-6 gap-1">
         {APP_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActivePath(pathname, item.href);

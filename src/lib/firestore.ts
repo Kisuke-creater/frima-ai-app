@@ -1,4 +1,10 @@
 import type { Marketplace, ShippingSpec } from "./simulation/types";
+import type {
+  DemandLevel,
+  ItemCondition,
+  PlatformComparisonResult,
+  ProductMarketAnalysisResult,
+} from "./market-analysis/types";
 
 import { FirebaseError } from "firebase/app";
 import { onAuthStateChanged } from "firebase/auth";
@@ -6,6 +12,7 @@ import {
   addDoc,
   collection,
   doc,
+  type FieldValue,
   getDoc,
   getDocs,
   serverTimestamp,
@@ -36,6 +43,29 @@ export interface Item {
   shippingSpec?: ShippingSpec;
 }
 
+export interface MarketAnalysis {
+  id?: string;
+  uid: string;
+  inputTitle: string;
+  inputDescription: string;
+  inputCondition: ItemCondition;
+  imageCount: number;
+  suggestedTitle: string;
+  suggestedDescription: string;
+  category: string;
+  demandLevel: DemandLevel;
+  demandSummary: string;
+  overallPriceLow: number;
+  overallPriceHigh: number;
+  estimatedSellDaysMin: number;
+  estimatedSellDaysMax: number;
+  recommendedPlatform: string;
+  recommendationReason: string;
+  conditionNote: string;
+  platforms: PlatformComparisonResult[];
+  createdAt?: TimestampLike;
+}
+
 interface ItemDocument {
   uid: string;
   title: string;
@@ -49,6 +79,28 @@ interface ItemDocument {
   soldAt?: Timestamp | null;
   soldPrice?: number | null;
   shippingSpec?: ShippingSpec | null;
+}
+
+interface MarketAnalysisDocument {
+  uid: string;
+  inputTitle: string;
+  inputDescription: string;
+  inputCondition: ItemCondition;
+  imageCount: number;
+  suggestedTitle: string;
+  suggestedDescription: string;
+  category: string;
+  demandLevel: DemandLevel;
+  demandSummary: string;
+  overallPriceLow: number;
+  overallPriceHigh: number;
+  estimatedSellDaysMin: number;
+  estimatedSellDaysMax: number;
+  recommendedPlatform: string;
+  recommendationReason: string;
+  conditionNote: string;
+  platforms: PlatformComparisonResult[];
+  createdAt?: Timestamp | FieldValue | null;
 }
 
 export interface ImportItemInput {
@@ -66,12 +118,24 @@ export interface ImportItemInput {
   shippingSpec?: ShippingSpec;
 }
 
+export interface AddMarketAnalysisInput extends ProductMarketAnalysisResult {
+  uid: string;
+  inputTitle: string;
+  inputDescription?: string;
+  inputCondition: ItemCondition;
+  imageCount: number;
+}
+
 function getUserItemsCollection(uid: string) {
   return collection(getFirebaseDb(), "users", uid, "items");
 }
 
 function getUserItemDoc(uid: string, itemId: string) {
   return doc(getFirebaseDb(), "users", uid, "items", itemId);
+}
+
+function getUserAnalysisCollection(uid: string) {
+  return collection(getFirebaseDb(), "users", uid, "analyses");
 }
 
 function mapItemDocument(id: string, row: ItemDocument): Item {
@@ -197,6 +261,34 @@ export async function addItem(
     soldPrice: null,
     shippingSpec: item.shippingSpec ?? null,
   });
+
+  return docRef.id;
+}
+
+export async function addMarketAnalysis(analysis: AddMarketAnalysisInput): Promise<string> {
+  await assertOwnedUser(analysis.uid);
+
+  const docRef = await addDoc(getUserAnalysisCollection(analysis.uid), {
+    uid: analysis.uid,
+    inputTitle: analysis.inputTitle,
+    inputDescription: analysis.inputDescription ?? "",
+    inputCondition: analysis.inputCondition,
+    imageCount: analysis.imageCount,
+    suggestedTitle: analysis.suggestedTitle,
+    suggestedDescription: analysis.suggestedDescription,
+    category: analysis.category,
+    demandLevel: analysis.demandLevel,
+    demandSummary: analysis.demandSummary,
+    overallPriceLow: analysis.overallPriceLow,
+    overallPriceHigh: analysis.overallPriceHigh,
+    estimatedSellDaysMin: analysis.estimatedSellDaysMin,
+    estimatedSellDaysMax: analysis.estimatedSellDaysMax,
+    recommendedPlatform: analysis.recommendedPlatform,
+    recommendationReason: analysis.recommendationReason,
+    conditionNote: analysis.conditionNote,
+    platforms: analysis.platforms,
+    createdAt: serverTimestamp(),
+  } satisfies MarketAnalysisDocument);
 
   return docRef.id;
 }

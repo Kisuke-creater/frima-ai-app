@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Calculator, LoaderCircle, Wallet } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -28,6 +29,7 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import Input, { fieldClassName } from "@/components/ui/Input";
+import MarketAnalysisPanel from "@/components/analysis/MarketAnalysisPanel";
 import { cn } from "@/lib/cn";
 
 type MarketplaceOption = Marketplace | "";
@@ -46,6 +48,8 @@ function gramsToKgInputString(value?: number): string {
 
 export default function SimulatorPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get("tab") ?? "profit";
 
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +77,11 @@ export default function SimulatorPage() {
   );
 
   useEffect(() => {
+    if (tab === "market-analysis") {
+      setLoading(false);
+      return;
+    }
+
     if (!user) return;
 
     setLoading(true);
@@ -85,7 +94,7 @@ export default function SimulatorPage() {
         setError(getFirestoreClientErrorMessage(cause));
       })
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [tab, user]);
 
   useEffect(() => {
     if (!selectedItem) {
@@ -229,6 +238,10 @@ export default function SimulatorPage() {
       setRunning(false);
     }
   };
+
+  if (tab === "market-analysis") {
+    return <MarketAnalysisPanel />;
+  }
 
   return (
     <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">

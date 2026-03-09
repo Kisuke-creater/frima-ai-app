@@ -4,15 +4,20 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Header from "@/components/layout/Header";
 import Sidebar, { MobileNav } from "@/components/layout/Sidebar";
 import PageContainer from "@/components/common/PageContainer";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { LoaderCircle } from "lucide-react";
 
 function NavLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const publicPaths = useMemo(() => new Set(["/login", "/signup"]), []);
+  const pathnameWithSearch = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     if (!loading && !user && !publicPaths.has(pathname)) {
@@ -41,14 +46,14 @@ function NavLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Sidebar pathname={pathname} userLabel={userLabel} />
+      <Sidebar pathname={pathnameWithSearch} userLabel={userLabel} />
       <div className="lg:pl-72">
-        <Header pathname={pathname} userLabel={userLabel} />
+        <Header pathname={pathnameWithSearch} userLabel={userLabel} />
         <main className="pb-24 pt-6 lg:pb-10">
           <PageContainer>{children}</PageContainer>
         </main>
       </div>
-      <MobileNav pathname={pathname} />
+      <MobileNav pathname={pathnameWithSearch} />
     </div>
   );
 }
