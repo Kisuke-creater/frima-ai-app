@@ -32,6 +32,7 @@ export interface Item {
   uid: string;
   title: string;
   description: string;
+  imageUrls?: string[];
   category: string;
   condition: string;
   price: number;
@@ -70,6 +71,7 @@ interface ItemDocument {
   uid: string;
   title: string;
   description: string;
+  imageUrls?: string[] | null;
   category: string;
   condition: string;
   price: number;
@@ -107,6 +109,7 @@ export interface ImportItemInput {
   uid: string;
   title: string;
   description: string;
+  imageUrls?: string[];
   category: string;
   condition: string;
   price: number;
@@ -139,11 +142,16 @@ function getUserAnalysisCollection(uid: string) {
 }
 
 function mapItemDocument(id: string, row: ItemDocument): Item {
+  const imageUrls = Array.isArray(row.imageUrls)
+    ? row.imageUrls.filter((value): value is string => typeof value === "string" && value.length > 0)
+    : [];
+
   return {
     id,
     uid: row.uid,
     title: row.title,
     description: row.description,
+    imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
     category: row.category,
     condition: row.condition,
     price: row.price,
@@ -251,6 +259,7 @@ export async function addItem(
     uid: item.uid,
     title: item.title,
     description: item.description,
+    imageUrls: item.imageUrls ?? [],
     category: item.category,
     condition: item.condition,
     price: item.price,
@@ -316,6 +325,7 @@ export async function importItems(uid: string, items: ImportItemInput[]): Promis
         uid: item.uid,
         title: item.title,
         description: item.description,
+        imageUrls: item.imageUrls ?? [],
         category: item.category,
         condition: item.condition,
         price: item.price,

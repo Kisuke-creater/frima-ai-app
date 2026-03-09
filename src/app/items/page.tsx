@@ -378,6 +378,22 @@ export default function ItemsPage() {
               role="button"
               tabIndex={0}
             >
+              {item.imageUrls && item.imageUrls.length > 0 ? (
+                <div className="aspect-[4/3] w-full overflow-hidden border-b border-slate-100 bg-slate-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.imageUrls[0]}
+                    alt={item.title}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              ) : (
+                <div className="grid aspect-[4/3] w-full place-items-center border-b border-slate-100 bg-slate-100 text-xs font-medium text-slate-400">
+                  NO IMAGE
+                </div>
+              )}
+
               <CardHeader className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -481,6 +497,30 @@ export default function ItemsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 bg-white p-6">
+              {detailDialogItem.imageUrls && detailDialogItem.imageUrls.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    IMAGES
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {detailDialogItem.imageUrls.map((imageUrl, index) => (
+                      <div
+                        key={`${imageUrl}-${index}`}
+                        className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={imageUrl}
+                          alt={`${detailDialogItem.title} ${index + 1}`}
+                          className="aspect-[4/3] w-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                   <p className="text-xs font-semibold text-slate-500">状態</p>

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { addItem, getFirestoreClientErrorMessage } from "@/lib/firestore";
+import { uploadItemImages } from "@/lib/firebase-storage";
 import type { Marketplace } from "@/lib/simulation/types";
 import Button from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -265,10 +266,19 @@ export default function GeneratePage() {
     setError("");
 
     try {
+      const imageUrls = await uploadItemImages(
+        user.uid,
+        images.map((image) => ({
+          dataUrl: image.dataUrl,
+          mimeType: image.mimeType,
+        })),
+      );
+
       await addItem({
         uid: user.uid,
         title: result.title,
         description: result.description,
+        imageUrls,
         category: result.category,
         condition,
         price: selectedPrice,

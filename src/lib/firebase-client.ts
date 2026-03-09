@@ -7,6 +7,7 @@ import {
 } from "firebase/app";
 import { type Auth, getAuth, GoogleAuthProvider } from "firebase/auth";
 import { type Firestore, getFirestore } from "firebase/firestore";
+import { type FirebaseStorage, getStorage } from "firebase/storage";
 
 const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 const FIREBASE_AUTH_DOMAIN = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
@@ -18,6 +19,7 @@ const FIREBASE_MESSAGING_SENDER_ID =
 
 let firebaseApp: FirebaseApp | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
+let firebaseStorage: FirebaseStorage | null = null;
 
 function getMissingFirebaseEnvKeys(): string[] {
   const missing: string[] = [];
@@ -25,6 +27,7 @@ function getMissingFirebaseEnvKeys(): string[] {
   if (!FIREBASE_AUTH_DOMAIN) missing.push("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN");
   if (!FIREBASE_PROJECT_ID) missing.push("NEXT_PUBLIC_FIREBASE_PROJECT_ID");
   if (!FIREBASE_APP_ID) missing.push("NEXT_PUBLIC_FIREBASE_APP_ID");
+  if (!FIREBASE_STORAGE_BUCKET) missing.push("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET");
   return missing;
 }
 
@@ -57,6 +60,12 @@ export function getFirebaseAuth(): Auth {
 
 export function getFirebaseDb(): Firestore {
   return getFirestore(getFirebaseApp());
+}
+
+export function getFirebaseStorage(): FirebaseStorage {
+  if (firebaseStorage) return firebaseStorage;
+  firebaseStorage = getStorage(getFirebaseApp());
+  return firebaseStorage;
 }
 
 export function getGoogleAuthProvider(): GoogleAuthProvider {
