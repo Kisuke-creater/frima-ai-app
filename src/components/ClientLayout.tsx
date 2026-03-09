@@ -5,8 +5,19 @@ import Header from "@/components/layout/Header";
 import Sidebar, { MobileNav } from "@/components/layout/Sidebar";
 import PageContainer from "@/components/common/PageContainer";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { LoaderCircle } from "lucide-react";
+
+function LayoutLoadingFallback() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-slate-50">
+      <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+        <LoaderCircle className="size-4 animate-spin text-brand-600" />
+        Loading user session...
+      </div>
+    </div>
+  );
+}
 
 function NavLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -30,14 +41,7 @@ function NavLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (loading) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-slate-50">
-        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-          <LoaderCircle className="size-4 animate-spin text-brand-600" />
-          認証情報を確認しています...
-        </div>
-      </div>
-    );
+    return <LayoutLoadingFallback />;
   }
 
   if (!user) return null;
@@ -61,7 +65,9 @@ function NavLayout({ children }: { children: React.ReactNode }) {
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <NavLayout>{children}</NavLayout>
+      <Suspense fallback={<LayoutLoadingFallback />}>
+        <NavLayout>{children}</NavLayout>
+      </Suspense>
     </AuthProvider>
   );
 }

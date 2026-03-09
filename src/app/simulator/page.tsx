@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Calculator, LoaderCircle, Wallet } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -46,7 +46,7 @@ function gramsToKgInputString(value?: number): string {
   return value == null ? "" : String(value / 1000);
 }
 
-export default function SimulatorPage() {
+function SimulatorPageContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const tab = searchParams.get("tab") ?? "profit";
@@ -568,5 +568,13 @@ export default function SimulatorPage() {
         )}
       </section>
     </div>
+  );
+}
+
+export default function SimulatorPage() {
+  return (
+    <Suspense fallback={null}>
+      <SimulatorPageContent />
+    </Suspense>
   );
 }
