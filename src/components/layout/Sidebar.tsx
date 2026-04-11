@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   Calculator,
   LayoutDashboard,
+  MessageSquareText,
   Package,
   Settings,
   Sparkles,
@@ -20,6 +21,7 @@ export const APP_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/generate", label: "Product Registration", icon: Sparkles },
   { href: "/items", label: "Items", icon: Package },
+  { href: "/negotiation", label: "Negotiation AI", icon: MessageSquareText },
   { href: "/simulator?tab=profit", label: "Profit Simulation", icon: Calculator },
   { href: "/simulator?tab=market-analysis", label: "Market Analysis", icon: TrendingUp },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -108,7 +110,7 @@ interface MobileNavProps {
 export function MobileNav({ pathname }: MobileNavProps) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/96 px-2 py-2 backdrop-blur lg:hidden">
-      <ul className="grid grid-cols-6 gap-1">
+      <ul className="grid grid-cols-7 gap-1">
         {APP_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActivePath(pathname, item.href);

@@ -31,6 +31,13 @@ const PAGE_META: Array<{ matcher: (pathname: string) => boolean; meta: HeaderMet
     },
   },
   {
+    matcher: (pathname) => pathname.startsWith("/negotiation"),
+    meta: {
+      title: "Negotiation AI",
+      description: "値下げ交渉の判断、利益確認、返信文作成をまとめて支援します。",
+    },
+  },
+  {
     matcher: (pathname) => pathname.startsWith("/simulator?tab=market-analysis"),
     meta: {
       title: "Market Analysis",
