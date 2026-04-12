@@ -1,8 +1,8 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
-import { Download, LoaderCircle, LogOut, Monitor, Moon, Sun, Upload } from "lucide-react";
+import { useRef, useState, useSyncExternalStore } from "react";
+import { Download, Globe, LoaderCircle, LogOut, Monitor, Moon, Sun, Upload } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import {
@@ -15,7 +15,13 @@ import {
 import { MARKETPLACE_ORDER, getMarketplaceLabel } from "@/lib/simulation/platform-fees";
 import type { Marketplace, ShippingSpec } from "@/lib/simulation/types";
 import Button from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import {
+  APP_LANGUAGE_OPTIONS,
+  setAppLanguage,
+  type AppLanguage,
+  useAppLanguage,
+} from "@/lib/language";
 
 type ThemeOption = "light" | "dark" | "system";
 
@@ -23,6 +29,22 @@ const themeLabelMap: Record<ThemeOption, { label: string; icon: typeof Sun }> = 
   light: { label: "ライトモード", icon: Sun },
   dark: { label: "ダークモード", icon: Moon },
   system: { label: "システム設定に合わせる", icon: Monitor },
+};
+
+const languageLabelMap: Record<
+  AppLanguage,
+  { label: string; description: string; available: boolean }
+> = {
+  ja: {
+    label: "日本語",
+    description: "現在のアプリ表示で利用できます。",
+    available: true,
+  },
+  en: {
+    label: "English",
+    description: "順次対応予定です。",
+    available: false,
+  },
 };
 
 const conditionLabelMap: Record<string, string> = {
@@ -90,6 +112,11 @@ const csvColumnAliases = {
 
 type CsvColumnKey = keyof typeof csvColumnAliases;
 type CsvColumnIndexes = Record<CsvColumnKey, number>;
+
+function subscribeToClientRender(callback: () => void) {
+  callback();
+  return () => {};
+}
 
 function escapeCsvValue(value: string | number): string {
   const text = String(value);
@@ -385,7 +412,12 @@ export default function SettingsPage() {
   const router = useRouter();
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(
+    subscribeToClientRender,
+    () => true,
+    () => false,
+  );
+  const language = useAppLanguage();
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState("");
   const [exportSuccess, setExportSuccess] = useState("");
@@ -393,15 +425,17 @@ export default function SettingsPage() {
   const [importError, setImportError] = useState("");
   const [importSuccess, setImportSuccess] = useState("");
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   if (!mounted) {
     return <div className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />;
   }
 
   const currentTheme = (theme ?? "system") as ThemeOption;
+
+  const handleLanguageChange = (nextLanguage: AppLanguage) => {
+    if (!languageLabelMap[nextLanguage].available) return;
+
+    setAppLanguage(nextLanguage);
+  };
 
   const handleExportItemsCsv = async () => {
     if (!user?.uid) {
@@ -473,41 +507,98 @@ export default function SettingsPage() {
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-      <Card>
-        <CardHeader>
-          <CardTitle>テーマ設定</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {(["light", "dark", "system"] as ThemeOption[]).map((option) => {
-            const meta = themeLabelMap[option];
-            const Icon = meta.icon;
-            const active = currentTheme === option;
-            return (
-              <label
-                key={option}
-                className={`flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
-                  active
-                    ? "border-brand-300 bg-brand-50"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className="size-4 text-slate-500" />
-                  <span className="text-sm font-medium text-slate-700">{meta.label}</span>
-                </div>
-                <input
-                  type="radio"
-                  name="theme"
-                  value={option}
-                  checked={active}
-                  onChange={() => setTheme(option)}
-                  className="size-4 accent-blue-600"
-                />
-              </label>
-            );
-          })}
-        </CardContent>
-      </Card>
+      <div className="space-y-5">
+        <Card>
+          <CardHeader>
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600">
+                <Globe className="size-4" />
+              </div>
+              <div>
+                <CardTitle>言語設定</CardTitle>
+                <CardDescription>表示言語をこのブラウザに保存します。</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {APP_LANGUAGE_OPTIONS.map((option) => {
+              const meta = languageLabelMap[option];
+              const active = language === option;
+              return (
+                <label
+                  key={option}
+                  className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
+                    meta.available ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+                  } ${
+                    active
+                      ? "border-brand-300 bg-brand-50"
+                      : meta.available
+                        ? "border-slate-200 bg-white hover:bg-slate-50"
+                        : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-slate-700">{meta.label}</span>
+                      {!meta.available && (
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          準備中
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">{meta.description}</p>
+                  </div>
+                  <input
+                    type="radio"
+                    name="language"
+                    value={option}
+                    checked={active}
+                    disabled={!meta.available}
+                    onChange={() => handleLanguageChange(option)}
+                    className="size-4 accent-blue-600"
+                  />
+                </label>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>テーマ設定</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(["light", "dark", "system"] as ThemeOption[]).map((option) => {
+              const meta = themeLabelMap[option];
+              const Icon = meta.icon;
+              const active = currentTheme === option;
+              return (
+                <label
+                  key={option}
+                  className={`flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
+                    active
+                      ? "border-brand-300 bg-brand-50"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className="size-4 text-slate-500" />
+                    <span className="text-sm font-medium text-slate-700">{meta.label}</span>
+                  </div>
+                  <input
+                    type="radio"
+                    name="theme"
+                    value={option}
+                    checked={active}
+                    onChange={() => setTheme(option)}
+                    className="size-4 accent-blue-600"
+                  />
+                </label>
+              );
+            })}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>

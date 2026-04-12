@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   Calculator,
@@ -10,21 +12,58 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { type AppLanguage, useAppLanguage } from "@/lib/language";
 
 type NavItem = {
   href: string;
-  label: string;
+  label: Record<AppLanguage, string>;
+  mobileLabel: Record<AppLanguage, string>;
   icon: LucideIcon;
 };
 
 export const APP_NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/generate", label: "Product Registration", icon: Sparkles },
-  { href: "/items", label: "Items", icon: Package },
-  { href: "/negotiation", label: "Negotiation AI", icon: MessageSquareText },
-  { href: "/simulator?tab=profit", label: "Profit Simulation", icon: Calculator },
-  { href: "/simulator?tab=market-analysis", label: "Market Analysis", icon: TrendingUp },
-  { href: "/settings", label: "Settings", icon: Settings },
+  {
+    href: "/dashboard",
+    label: { ja: "ダッシュボード", en: "Dashboard" },
+    mobileLabel: { ja: "ホーム", en: "Home" },
+    icon: LayoutDashboard,
+  },
+  {
+    href: "/generate",
+    label: { ja: "商品登録", en: "Product Registration" },
+    mobileLabel: { ja: "登録", en: "Create" },
+    icon: Sparkles,
+  },
+  {
+    href: "/items",
+    label: { ja: "商品一覧", en: "Items" },
+    mobileLabel: { ja: "商品", en: "Items" },
+    icon: Package,
+  },
+  {
+    href: "/negotiation",
+    label: { ja: "価格交渉AI", en: "Negotiation AI" },
+    mobileLabel: { ja: "交渉", en: "Deals" },
+    icon: MessageSquareText,
+  },
+  {
+    href: "/simulator?tab=profit",
+    label: { ja: "利益シミュレーション", en: "Profit Simulation" },
+    mobileLabel: { ja: "利益", en: "Profit" },
+    icon: Calculator,
+  },
+  {
+    href: "/simulator?tab=market-analysis",
+    label: { ja: "市場分析", en: "Market Analysis" },
+    mobileLabel: { ja: "分析", en: "Market" },
+    icon: TrendingUp,
+  },
+  {
+    href: "/settings",
+    label: { ja: "設定", en: "Settings" },
+    mobileLabel: { ja: "設定", en: "Settings" },
+    icon: Settings,
+  },
 ];
 
 function splitPathAndQuery(input: string): { path: string; query: URLSearchParams } {
@@ -57,6 +96,8 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ pathname, userLabel }: SidebarProps) {
+  const language = useAppLanguage();
+
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-72 flex-col border-r border-slate-200 bg-white px-5 py-6 lg:flex">
       <div className="mb-7">
@@ -68,7 +109,9 @@ export default function Sidebar({ pathname, userLabel }: SidebarProps) {
             <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
               Frima AI
             </p>
-            <p className="text-xs text-slate-500">Listing Workflow</p>
+            <p className="text-xs text-slate-500">
+              {language === "ja" ? "出品ワークフロー" : "Listing Workflow"}
+            </p>
           </div>
         </Link>
       </div>
@@ -89,7 +132,7 @@ export default function Sidebar({ pathname, userLabel }: SidebarProps) {
               )}
             >
               <Icon className={cn("size-[18px]", active ? "text-brand-600" : "text-slate-400")} />
-              <span>{item.label}</span>
+              <span>{item.label[language]}</span>
             </Link>
           );
         })}
@@ -97,7 +140,9 @@ export default function Sidebar({ pathname, userLabel }: SidebarProps) {
 
       <div className="mt-auto rounded-2xl border border-brand-100 bg-brand-50/70 p-4">
         <p className="truncate text-sm font-semibold text-slate-900">{userLabel}</p>
-        <p className="mt-1 text-xs text-slate-500">AIで出品作業を短縮</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {language === "ja" ? "AIで出品作業を短縮" : "Shorten listing work with AI"}
+        </p>
       </div>
     </aside>
   );
@@ -108,6 +153,8 @@ interface MobileNavProps {
 }
 
 export function MobileNav({ pathname }: MobileNavProps) {
+  const language = useAppLanguage();
+
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/96 px-2 py-2 backdrop-blur lg:hidden">
       <ul className="grid grid-cols-7 gap-1">
@@ -126,7 +173,7 @@ export function MobileNav({ pathname }: MobileNavProps) {
                 )}
               >
                 <Icon className="size-4" />
-                <span className="leading-none">{item.label.split(" ")[0]}</span>
+                <span className="leading-none">{item.mobileLabel[language]}</span>
               </Link>
             </li>
           );

@@ -7,6 +7,7 @@ import PageContainer from "@/components/common/PageContainer";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo } from "react";
 import { LoaderCircle } from "lucide-react";
+import { useAppLanguage } from "@/lib/language";
 
 function LayoutLoadingFallback() {
   return (
@@ -21,6 +22,7 @@ function LayoutLoadingFallback() {
 
 function NavLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const language = useAppLanguage();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -36,6 +38,10 @@ function NavLayout({ children }: { children: React.ReactNode }) {
     }
   }, [loading, pathname, publicPaths, router, user]);
 
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+
   if (publicPaths.has(pathname)) {
     return <>{children}</>;
   }
@@ -46,7 +52,7 @@ function NavLayout({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
-  const userLabel = user.displayName || user.email || "Guest User";
+  const userLabel = user.displayName || user.email || (language === "ja" ? "ゲストユーザー" : "Guest User");
 
   return (
     <div className="min-h-screen bg-slate-50">
